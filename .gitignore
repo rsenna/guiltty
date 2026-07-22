@@ -2,3 +2,7 @@
 .claude/settings.local.json
 .claude/worktrees/
 .claude/.supermemory-claude/
+
+/target/
+
+/cargo.lock
