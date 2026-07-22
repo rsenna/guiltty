@@ -13,12 +13,12 @@ pub struct Color {
 
 impl Color {
     /// Creates a fully opaque color (alpha = 255) from the given RGB components.
-    pub fn rgb(r: u8, g: u8, b: u8) -> Self {
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b, a: 255 }
     }
 
     /// Creates a color from explicit RGBA components.
-    pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 }
@@ -81,9 +81,14 @@ impl std::error::Error for Error {}
 /// Implemented by backend crates (e.g. `guiltty-kitty`); `guiltty-core` never
 /// depends on a specific backend.
 pub trait Backend {
+    /// The error type this backend surfaces from its operations. Lets backends expose
+    /// richer, backend-specific error information while still fitting this trait; backends
+    /// with no need for that can simply use [`Error`].
+    type Error: std::error::Error;
+
     /// Presents the current frame to the terminal. Backends define their own
     /// frame/state representation in later iterations of this trait.
-    fn present(&mut self) -> Result<(), Error>;
+    fn present(&mut self) -> Result<(), Self::Error>;
 }
 
 #[cfg(test)]

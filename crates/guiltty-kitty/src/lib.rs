@@ -9,6 +9,8 @@ use guiltty_core::{Backend, Error};
 pub struct KittyBackend;
 
 impl Backend for KittyBackend {
+    type Error = Error;
+
     fn present(&mut self) -> Result<(), Error> {
         Ok(())
     }
