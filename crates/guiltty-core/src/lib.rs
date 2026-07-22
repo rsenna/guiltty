@@ -241,6 +241,223 @@ mod font {
     }
 }
 
+/// How a [`Shape`] is painted. v0 supports solid color only; more fill kinds
+/// (gradients, patterns) can be added as new variants without breaking callers
+/// that already match on `Fill::Solid`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fill {
+    Solid(Color),
+}
+
+impl Fill {
+    /// A solid, uniform color fill.
+    pub fn solid(color: Color) -> Self {
+        Self::Solid(color)
+    }
+
+    fn color(&self) -> Color {
+        match self {
+            Self::Solid(c) => *c,
+        }
+    }
+}
+
+/// A drawable shape. Rects/circles/ellipses/triangles are filled solid; `Line` and
+/// `Path` have no interior to fill, so their `Fill`'s color is used as the stroke color.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Shape {
+    Line {
+        from: Point,
+        to: Point,
+    },
+    Rect {
+        origin: Point,
+        width: u32,
+        height: u32,
+    },
+    Circle {
+        center: Point,
+        radius: u32,
+    },
+    Ellipse {
+        center: Point,
+        rx: u32,
+        ry: u32,
+    },
+    Triangle {
+        a: Point,
+        b: Point,
+        c: Point,
+    },
+    /// An arbitrary open or closed path connecting `points` in order. v0 draws this as
+    /// connected line segments (stroke only) — polygon fill for arbitrary paths is left
+    /// for a follow-up task; `closed` only controls whether the last point connects back
+    /// to the first.
+    Path {
+        points: Vec<Point>,
+        closed: bool,
+    },
+}
+
+impl Shape {
+    pub fn line(from: Point, to: Point) -> Self {
+        Self::Line { from, to }
+    }
+
+    pub fn rect(origin: Point, width: u32, height: u32) -> Self {
+        Self::Rect {
+            origin,
+            width,
+            height,
+        }
+    }
+
+    pub fn circle(center: Point, radius: u32) -> Self {
+        Self::Circle { center, radius }
+    }
+
+    pub fn ellipse(center: Point, rx: u32, ry: u32) -> Self {
+        Self::Ellipse { center, rx, ry }
+    }
+
+    pub fn triangle(a: Point, b: Point, c: Point) -> Self {
+        Self::Triangle { a, b, c }
+    }
+
+    pub fn path(points: Vec<Point>, closed: bool) -> Self {
+        Self::Path { points, closed }
+    }
+}
+
+impl Canvas {
+    /// Draws `shape` into this canvas using `fill`. See [`Shape`] for which variants are
+    /// filled solid vs. stroked.
+    pub fn draw_shape(&mut self, shape: &Shape, fill: Fill) {
+        let color = fill.color();
+        match shape {
+            Shape::Line { from, to } => self.stroke_line(*from, *to, color),
+            Shape::Rect {
+                origin,
+                width,
+                height,
+            } => self.fill_rect(*origin, *width, *height, color),
+            Shape::Circle { center, radius } => self.fill_ellipse(*center, *radius, *radius, color),
+            Shape::Ellipse { center, rx, ry } => self.fill_ellipse(*center, *rx, *ry, color),
+            Shape::Triangle { a, b, c } => self.fill_triangle(*a, *b, *c, color),
+            Shape::Path { points, closed } => self.stroke_path(points, *closed, color),
+        }
+    }
+
+    /// Bresenham's line algorithm — no anti-aliasing, one pixel wide.
+    fn stroke_line(&mut self, from: Point, to: Point, color: Color) {
+        let (mut x0, mut y0) = (from.x, from.y);
+        let (x1, y1) = (to.x, to.y);
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
+        let sx = if x0 < x1 {
+            1
+        } else {
+            -1
+        };
+        let sy = if y0 < y1 {
+            1
+        } else {
+            -1
+        };
+        let mut err = dx + dy;
+        loop {
+            if x0 >= 0 && y0 >= 0 {
+                self.set_pixel(x0 as u32, y0 as u32, color);
+            }
+            if x0 == x1 && y0 == y1 {
+                break;
+            }
+            let e2 = 2 * err;
+            if e2 >= dy {
+                err += dy;
+                x0 += sx;
+            }
+            if e2 <= dx {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
+
+    fn stroke_path(&mut self, points: &[Point], closed: bool, color: Color) {
+        for pair in points.windows(2) {
+            self.stroke_line(pair[0], pair[1], color);
+        }
+        if closed {
+            if let (Some(&first), Some(&last)) = (points.first(), points.last()) {
+                self.stroke_line(last, first, color);
+            }
+        }
+    }
+
+    fn fill_rect(&mut self, origin: Point, width: u32, height: u32, color: Color) {
+        for dy in 0..height {
+            for dx in 0..width {
+                let x = origin.x + dx as i32;
+                let y = origin.y + dy as i32;
+                if x >= 0 && y >= 0 {
+                    self.set_pixel(x as u32, y as u32, color);
+                }
+            }
+        }
+    }
+
+    /// Filled ellipse; a circle is the `rx == ry` case (see [`Shape::Circle`]).
+    fn fill_ellipse(&mut self, center: Point, rx: u32, ry: u32, color: Color) {
+        if rx == 0 || ry == 0 {
+            return;
+        }
+        let (rx, ry) = (rx as i64, ry as i64);
+        for dy in -ry..=ry {
+            for dx in -rx..=rx {
+                // (dx/rx)^2 + (dy/ry)^2 <= 1, cross-multiplied to stay in integers.
+                if dx * dx * ry * ry + dy * dy * rx * rx <= rx * rx * ry * ry {
+                    let x = center.x + dx as i32;
+                    let y = center.y + dy as i32;
+                    if x >= 0 && y >= 0 {
+                        self.set_pixel(x as u32, y as u32, color);
+                    }
+                }
+            }
+        }
+    }
+
+    fn fill_triangle(&mut self, a: Point, b: Point, c: Point, color: Color) {
+        let min_x = a.x.min(b.x).min(c.x).max(0);
+        let max_x = a.x.max(b.x).max(c.x);
+        let min_y = a.y.min(b.y).min(c.y).max(0);
+        let max_y = a.y.max(b.y).max(c.y);
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let p = Point::new(x, y);
+                if point_in_triangle(p, a, b, c) && x >= 0 && y >= 0 {
+                    self.set_pixel(x as u32, y as u32, color);
+                }
+            }
+        }
+    }
+}
+
+/// Sign of the cross product `(p2 - p1) x (p - p1)`; used by [`point_in_triangle`] to
+/// tell which side of edge `p1`-`p2` the point `p` is on.
+fn edge_sign(p: Point, p1: Point, p2: Point) -> i64 {
+    (p.x as i64 - p2.x as i64) * (p1.y as i64 - p2.y as i64) - (p1.x as i64 - p2.x as i64) * (p.y as i64 - p2.y as i64)
+}
+
+fn point_in_triangle(p: Point, a: Point, b: Point, c: Point) -> bool {
+    let d1 = edge_sign(p, a, b);
+    let d2 = edge_sign(p, b, c);
+    let d3 = edge_sign(p, c, a);
+    let has_neg = d1 < 0 || d2 < 0 || d3 < 0;
+    let has_pos = d1 > 0 || d2 > 0 || d3 > 0;
+    !(has_neg && has_pos)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,5 +552,99 @@ mod tests {
         }
         // 'I' should render shifted by one glyph advance (GLYPH_WIDTH + 1 = 4)
         assert_eq!(c.pixel(4, 0), Some(style.color));
+    }
+
+    #[test]
+    fn draw_shape_line_is_bresenham_horizontal() {
+        let mut c = Canvas::new(4, 5);
+        let color = Color::rgb(1, 2, 3);
+        c.draw_shape(
+            &Shape::line(Point::new(0, 2), Point::new(3, 2)),
+            Fill::solid(color),
+        );
+        for x in 0..4 {
+            assert_eq!(c.pixel(x, 2), Some(color), "at x={x}");
+        }
+        assert_eq!(c.pixel(0, 0), Some(Color::default()));
+        assert_eq!(c.pixel(0, 4), Some(Color::default()));
+    }
+
+    #[test]
+    fn draw_shape_rect_fills_solid() {
+        let mut c = Canvas::new(4, 4);
+        let color = Color::rgb(9, 9, 9);
+        c.draw_shape(&Shape::rect(Point::new(1, 1), 2, 2), Fill::solid(color));
+        for y in 1..3 {
+            for x in 1..3 {
+                assert_eq!(c.pixel(x, y), Some(color), "at ({x},{y})");
+            }
+        }
+        assert_eq!(c.pixel(0, 0), Some(Color::default()));
+        assert_eq!(c.pixel(3, 3), Some(Color::default()));
+    }
+
+    #[test]
+    fn draw_shape_circle_fills_center_not_corners() {
+        let mut c = Canvas::new(5, 5);
+        let color = Color::rgb(4, 5, 6);
+        c.draw_shape(&Shape::circle(Point::new(2, 2), 2), Fill::solid(color));
+        assert_eq!(c.pixel(2, 2), Some(color)); // center always inside
+        assert_eq!(c.pixel(0, 0), Some(Color::default())); // corner outside radius 2
+    }
+
+    #[test]
+    fn draw_shape_ellipse_respects_independent_radii() {
+        let mut c = Canvas::new(9, 5);
+        let color = Color::rgb(7, 8, 9);
+        // wide, short ellipse: rx=4, ry=1 centered at (4,2)
+        c.draw_shape(&Shape::ellipse(Point::new(4, 2), 4, 1), Fill::solid(color));
+        assert_eq!(c.pixel(4, 2), Some(color)); // center
+        assert_eq!(c.pixel(0, 2), Some(color)); // far left edge, within rx
+        assert_eq!(c.pixel(4, 0), Some(Color::default())); // above ry, outside
+    }
+
+    #[test]
+    fn draw_shape_triangle_fills_interior_not_exterior() {
+        let mut c = Canvas::new(6, 6);
+        let color = Color::rgb(1, 1, 1);
+        c.draw_shape(
+            &Shape::triangle(Point::new(0, 0), Point::new(5, 0), Point::new(0, 5)),
+            Fill::solid(color),
+        );
+        assert_eq!(c.pixel(1, 1), Some(color)); // well inside the right triangle
+        assert_eq!(c.pixel(5, 5), Some(Color::default())); // outside (opposite corner)
+    }
+
+    #[test]
+    fn draw_shape_path_strokes_open_segments_only() {
+        let mut c = Canvas::new(4, 4);
+        let color = Color::rgb(2, 2, 2);
+        c.draw_shape(
+            &Shape::path(
+                vec![Point::new(0, 0), Point::new(3, 0), Point::new(3, 3)],
+                false,
+            ),
+            Fill::solid(color),
+        );
+        assert_eq!(c.pixel(0, 0), Some(color));
+        assert_eq!(c.pixel(3, 0), Some(color));
+        assert_eq!(c.pixel(3, 3), Some(color));
+        // open path: no segment connects (3,3) back to (0,0)
+        assert_eq!(c.pixel(0, 3), Some(Color::default()));
+    }
+
+    #[test]
+    fn draw_shape_path_closed_connects_last_to_first() {
+        let mut c = Canvas::new(4, 4);
+        let color = Color::rgb(3, 3, 3);
+        c.draw_shape(
+            &Shape::path(
+                vec![Point::new(0, 0), Point::new(3, 0), Point::new(3, 3)],
+                true,
+            ),
+            Fill::solid(color),
+        );
+        // closed path adds a segment from (3,3) back to (0,0), passing through (1,1)/(2,2)
+        assert_eq!(c.pixel(1, 1), Some(color));
     }
 }
