@@ -1,0 +1,12 @@
+[package]
+name = "guiltty-examples"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Runnable demo binaries exercising guiltty's v0 feature set (manual visual verification in a kitty-compatible terminal)"
+
+[dependencies]
+guiltty = { path = "../crates/guiltty", version = "0.0.0" }

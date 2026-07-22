@@ -1,0 +1,13 @@
+[package]
+name = "guiltty"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "guiltty: pixel-level 2D graphics in the terminal via the kitty graphics protocol"
+
+[dependencies]
+guiltty-core = { path = "../guiltty-core", version = "0.0.0" }
+guiltty-kitty = { path = "../guiltty-kitty", version = "0.0.0" }

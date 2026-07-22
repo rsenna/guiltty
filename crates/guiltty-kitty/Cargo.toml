@@ -1,0 +1,12 @@
+[package]
+name = "guiltty-kitty"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Kitty graphics protocol backend for guiltty (pure Rust, no C FFI)"
+
+[dependencies]
+guiltty-core = { path = "../guiltty-core" }

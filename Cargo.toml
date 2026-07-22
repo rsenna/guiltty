@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/guiltty-core",
+    "crates/guiltty-kitty",
+    "crates/guiltty",
+    "examples",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["Rogério Senna"]
+repository = "https://github.com/rsenna/guiltty"

@@ -1,0 +1,11 @@
+[package]
+name = "guiltty-core"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Backend-agnostic canvas, shapes, text, sprites, regions, and zoom/scroll logic for guiltty"
+
+[dependencies]
