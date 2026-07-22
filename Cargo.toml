@@ -4,6 +4,7 @@ members = [
     "crates/guiltty-core",
     "crates/guiltty-kitty",
     "crates/guiltty",
+    "examples",
 ]
 
 [workspace.package]

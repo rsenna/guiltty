@@ -1,5 +1,6 @@
-//! Backend-agnostic core: canvas, shapes, text, sprites, viewport regions, and zoom/scroll logic.
-//! Defines the [`Backend`] trait that rendering backends (e.g. `guiltty-kitty`) implement.
+//! Backend-agnostic core primitives (`Color`, `Point`, `Rect`) and the [`Backend`] trait that
+//! rendering backends (e.g. `guiltty-kitty`) implement. Canvas, shape, sprite, region, and
+//! zoom/scroll logic described in the spec is not implemented yet — this is the scaffold only.
 
 /// RGBA8 color, used throughout for canvas pixels, shape fills, and sprite bitmaps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -11,10 +12,12 @@ pub struct Color {
 }
 
 impl Color {
+    /// Creates a fully opaque color (alpha = 255) from the given RGB components.
     pub fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b, a: 255 }
     }
 
+    /// Creates a color from explicit RGBA components.
     pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
@@ -28,6 +31,7 @@ pub struct Point {
 }
 
 impl Point {
+    /// Creates a point at the given pixel coordinates (origin top-left).
     pub fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
@@ -43,6 +47,8 @@ pub struct Rect {
 }
 
 impl Rect {
+    /// Creates a rectangle at pixel coordinates `(x, y)` (origin top-left) with the given
+    /// `width`/`height` in pixels.
     pub fn new(x: i32, y: i32, width: u32, height: u32) -> Self {
         Self {
             x,
