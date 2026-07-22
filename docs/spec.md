@@ -16,6 +16,7 @@ See [docs/intent/kitty-graphics-ui-toolkit.md](intent/kitty-graphics-ui-toolkit.
 - **Structure:** Cargo workspace (not a single crate) — a backend-agnostic core plus swappable rendering backends behind a trait, so future backends (notcurses, sixel, ctx.graphics-style) can be added without touching core drawing logic
 - **v0 backend:** kitty graphics protocol only, implemented in pure Rust via raw terminal escape sequences (no C FFI). `kittage` and `little-kitty` may be read as reference implementations but are not taken as dependencies for v0.
 - **Design inspiration, not a dependency:** [notcurses](https://github.com/dankamongmen/notcurses) — its plane/visual model informed the viewport-region and compositing design, evaluated and explicitly rejected as a v0 dependency (C FFI cost, system-install requirement, and object-model mismatch outweigh its multi-protocol benefit at this stage)
+- **Dev UX inspiration:** [ratatui](https://github.com/ratatui/ratatui) — its `Terminal<Backend>` + `Frame` + `draw(|frame| { ... })` immediate-mode render loop and composable `Widget` trait inspire the shape of guiltty's top-level API, given how well-known this UX is to Rust TUI developers
 - **Color model:** RGBA8 throughout (canvas pixels, shape fills, sprite bitmaps)
 - **Coordinate system:** pixel-addressable, origin top-left
 - **Rasterization:** CPU-side software rasterizer producing a pixel buffer per canvas, shipped to the terminal as an image via the kitty protocol. No GPU acceleration in v0 (left open for later, not ruled out)
@@ -52,20 +53,31 @@ tasks/                  → plan.md and todo.md (populated in the Plan/Tasks pha
 
 Standard Rust idioms: `snake_case` for functions/variables, `CamelCase` for types, `rustfmt` defaults, `clippy` clean with no warnings suppressed without a documented reason. Public API returns `Result<T, guiltty_core::Error>` rather than panicking; panics are reserved for programmer-error invariants (e.g., an out-of-bounds internal index), never for recoverable conditions like a failed terminal write.
 
-Illustrative target shape for the core API (not yet implemented):
+Illustrative target shape for the core API (not yet implemented), following ratatui's `Terminal`/`Frame`/`draw()` immediate-mode pattern:
 
 ```rust
-let mut canvas = Canvas::new(800, 600)?;
-canvas.set_zoom(1.5);
+let mut terminal = guiltty::init()?; // Terminal<KittyBackend>
+terminal.set_canvas_size(800, 600)?;
+terminal.set_zoom(1.5);
 
-canvas.draw_text("hello", Point::new(10, 10), &TextStyle::default())?;
-canvas.draw_shape(Shape::circle(Point::new(100, 100), 40), Fill::solid(Color::rgb(255, 0, 0)))?;
+let mut sprite = Sprite::new(Bitmap::from_file("ship.png")?, Point::new(50, 50));
 
-let mut sprite = canvas.add_sprite(Bitmap::from_file("ship.png")?, Point::new(50, 50))?;
-sprite.move_to(Point::new(60, 50));
+loop {
+    terminal.draw(|frame| {
+        frame.render_text("hello", Point::new(10, 10), &TextStyle::default());
+        frame.render_shape(Shape::circle(Point::new(100, 100), 40), Fill::solid(Color::rgb(255, 0, 0)));
+        frame.render_sprite(&sprite);
 
-let region = canvas.viewport(Rect::new(0, 0, 400, 300));
-region.render_to(&mut kitty_backend)?;
+        let region = frame.viewport(Rect::new(0, 0, 400, 300));
+        region.render_shape(Shape::rect(Point::new(0, 0), 100, 50), Fill::solid(Color::rgb(0, 255, 0)));
+    })?;
+
+    sprite.move_to(Point::new(60, 50));
+
+    if matches!(event::read()?, Event::Key(_)) {
+        break;
+    }
+}
 ```
 
 ## Testing Strategy
