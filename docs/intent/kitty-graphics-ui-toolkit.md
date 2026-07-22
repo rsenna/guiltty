@@ -1,4 +1,4 @@
-# kit-ui — Confirmed Intent
+# guiltty — Confirmed Intent
 
 - **Outcome:** A Rust library that draws real pixel-level 2D graphics into a terminal via the kitty graphics protocol — canvas, text, shapes, sprites, and independent drawable viewport regions — going beyond what character-cell TUI toolkits (ratatui, cursive) can express.
 - **User:** The author, solo + AI agents, building it primarily to consume from another Rust project already in progress; a public, more broadly usable crate is the longer-term shape, but not the immediate driver.
