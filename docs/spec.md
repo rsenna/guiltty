@@ -61,7 +61,6 @@ terminal.set_canvas_size(800, 600)?;
 terminal.set_zoom(1.5);
 
 let mut sprite = Sprite::new(Bitmap::from_file("ship.png")?, Point::new(50, 50));
-sprite.move_to(Point::new(60, 50));
 
 loop {
     terminal.draw(|frame| {
@@ -72,6 +71,8 @@ loop {
         let region = frame.viewport(Rect::new(0, 0, 400, 300));
         region.render_shape(Shape::rect(Point::new(0, 0), 100, 50), Fill::solid(Color::rgb(0, 255, 0)));
     })?;
+
+    sprite.move_to(Point::new(60, 50));
 
     if matches!(event::read()?, Event::Key(_)) {
         break;

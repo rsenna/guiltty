@@ -3,7 +3,8 @@
     "supermemory-plugins": {
       "source": {
         "source": "github",
-        "repo": "supermemoryai/claude-supermemory"
+        "repo": "supermemoryai/claude-supermemory",
+        "ref": "v0.0.10"
       }
     }
   },
