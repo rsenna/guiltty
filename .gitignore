@@ -1,0 +1,4 @@
+!.claude/
+.claude/settings.local.json
+.claude/worktrees/
+.claude/.supermemory-claude/
