@@ -91,12 +91,33 @@ pub trait Backend {
     fn present(&mut self) -> Result<(), Self::Error>;
 }
 
+/// Monotonically increasing counter handing out a fresh, unique id to every `Canvas`
+/// instance (including ones produced by `Canvas::clone()`) — see `Canvas::id`.
+static NEXT_CANVAS_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// A pixel buffer that can be drawn into. RGBA8, origin top-left, row-major.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Canvas {
+    /// Distinguishes this canvas from every other one, including clones of itself, so a
+    /// `Sprite`'s saved-under footprint (see [`DrawnFootprint`]) is never restored onto
+    /// the wrong canvas.
+    id: u64,
     width: u32,
     height: u32,
     pixels: Vec<Color>,
+}
+
+/// Manually implemented (rather than `#[derive(Clone)]`) so a cloned canvas gets its own
+/// fresh `id` instead of inheriting the original's — see the `id` field's doc comment.
+impl Clone for Canvas {
+    fn clone(&self) -> Self {
+        Self {
+            id: NEXT_CANVAS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            width: self.width,
+            height: self.height,
+            pixels: self.pixels.clone(),
+        }
+    }
 }
 
 impl Canvas {
@@ -115,6 +136,7 @@ impl Canvas {
             .checked_mul(height as usize)
             .expect("Canvas dimensions too large: width * height overflows usize");
         Self {
+            id: NEXT_CANVAS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             width,
             height,
             pixels: vec![Color::default(); len],
@@ -530,8 +552,9 @@ impl Bitmap {
     /// Creates a bitmap from an explicit pixel buffer (row-major, RGBA8).
     ///
     /// # Panics
-    /// Panics if `pixels.len() != width * height`, or if `width * height` overflows
-    /// `usize` (see [`Canvas::new`]'s panic contract, which mirrors this one).
+    /// Panics if `pixels.len() != width * height`, or via [`Bitmap::checked_len`] if
+    /// `width`/`height` don't fit in `usize` on the current target, or if
+    /// `width * height` overflows `usize`.
     pub fn new(width: u32, height: u32, pixels: Vec<Color>) -> Self {
         let expected = Self::checked_len(width, height);
         assert_eq!(
@@ -597,8 +620,11 @@ impl Bitmap {
 
 /// The rectangle of canvas pixels a [`Sprite`] last drew over, saved so
 /// [`Canvas::draw_sprite`] can restore them before drawing the sprite again elsewhere.
+/// Tagged with the id of the `Canvas` it was captured from, so it's never mistakenly
+/// restored onto a different canvas instance (see `Canvas::draw_sprite`).
 #[derive(Debug, Clone)]
 struct DrawnFootprint {
+    canvas_id: u64,
     x: i64,
     y: i64,
     width: u32,
@@ -608,11 +634,26 @@ struct DrawnFootprint {
 
 /// A movable 2D bitmap positioned over a canvas. See [`Canvas::draw_sprite`] for how
 /// moving and redrawing a sprite avoids leaving a trail of its previous position.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Sprite {
     bitmap: Bitmap,
     position: Point,
     last_draw: Option<DrawnFootprint>,
+}
+
+/// Manually implemented (rather than `#[derive(Clone)]`) so a cloned sprite starts with
+/// no drawing history of its own: it copies the bitmap and position, but not
+/// `last_draw`, since the clone has never actually been drawn anywhere. Without this, a
+/// clone of an already-drawn sprite would restore the *original* sprite's footprint the
+/// first time it's drawn, corrupting whatever the original still shows on the canvas.
+impl Clone for Sprite {
+    fn clone(&self) -> Self {
+        Self {
+            bitmap: self.bitmap.clone(),
+            position: self.position,
+            last_draw: None,
+        }
+    }
 }
 
 impl Sprite {
@@ -669,19 +710,26 @@ impl Canvas {
         let canvas_h = self.height as i64;
 
         if let Some(prev) = sprite.last_draw.take() {
-            let row_len = prev.width as usize;
-            for dy in 0..prev.height as i64 {
-                let y = prev.y + dy;
-                if y < 0 || y >= canvas_h {
-                    continue;
-                }
-                let row = dy as usize * row_len;
-                for dx in 0..prev.width as i64 {
-                    let x = prev.x + dx;
-                    if x < 0 || x >= canvas_w {
+            // A footprint captured from a *different* canvas has nothing to do with this
+            // one's current pixels; restoring it here would corrupt this canvas with
+            // stale content from elsewhere, so just drop it instead.
+            if prev.canvas_id != self.id {
+                sprite.last_draw = None;
+            } else {
+                let row_len = prev.width as usize;
+                for dy in 0..prev.height as i64 {
+                    let y = prev.y + dy;
+                    if y < 0 || y >= canvas_h {
                         continue;
                     }
-                    self.set_pixel(x as u32, y as u32, prev.pixels[row + dx as usize]);
+                    let row = dy as usize * row_len;
+                    for dx in 0..prev.width as i64 {
+                        let x = prev.x + dx;
+                        if x < 0 || x >= canvas_w {
+                            continue;
+                        }
+                        self.set_pixel(x as u32, y as u32, prev.pixels[row + dx as usize]);
+                    }
                 }
             }
         }
@@ -715,6 +763,7 @@ impl Canvas {
         }
 
         sprite.last_draw = Some(DrawnFootprint {
+            canvas_id: self.id,
             x: x_lo,
             y: y_lo,
             width: cap_w as u32,
@@ -1200,5 +1249,39 @@ mod tests {
         c.draw_sprite(&mut sprite);
         c.draw_sprite(&mut sprite); // redraw without moving
         assert_eq!(c.pixel(1, 0), Some(Color::rgb(7, 7, 7)));
+    }
+
+    #[test]
+    fn draw_sprite_clone_has_no_drawing_history() {
+        let mut c = Canvas::new(3, 1);
+        let mut original = Sprite::new(Bitmap::solid(1, 1, Color::rgb(1, 1, 1)), Point::new(0, 0));
+        c.draw_sprite(&mut original);
+
+        // Cloning after drawing must not carry over last_draw -- otherwise drawing the
+        // clone elsewhere would "restore" the original's footprint out from under it.
+        let mut clone = original.clone();
+        clone.move_to(Point::new(2, 0));
+        c.draw_sprite(&mut clone);
+
+        // The original sprite's pixel must be untouched by the clone's draw.
+        assert_eq!(c.pixel(0, 0), Some(Color::rgb(1, 1, 1)));
+        assert_eq!(c.pixel(2, 0), Some(Color::rgb(1, 1, 1)));
+    }
+
+    #[test]
+    fn draw_sprite_on_a_different_canvas_does_not_leak_the_first_canvas_pixels() {
+        let mut canvas_a = Canvas::new(2, 1);
+        let mut sprite = Sprite::new(Bitmap::solid(1, 1, Color::rgb(9, 9, 9)), Point::new(0, 0));
+        canvas_a.draw_sprite(&mut sprite); // captures canvas_a's background into last_draw
+
+        let mut canvas_b = Canvas::new(2, 1);
+        canvas_b.set_pixel(0, 0, Color::rgb(2, 2, 2)); // canvas_b's own distinct background
+        sprite.move_to(Point::new(1, 0));
+        canvas_b.draw_sprite(&mut sprite);
+
+        // The stale footprint captured from canvas_a must not have been restored onto
+        // canvas_b's position (0,0); canvas_b's own background must be untouched.
+        assert_eq!(canvas_b.pixel(0, 0), Some(Color::rgb(2, 2, 2)));
+        assert_eq!(canvas_b.pixel(1, 0), Some(Color::rgb(9, 9, 9)));
     }
 }
