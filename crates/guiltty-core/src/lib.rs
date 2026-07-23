@@ -103,10 +103,13 @@ impl Canvas {
     /// Creates a canvas of the given size, every pixel starting fully transparent
     /// (`Color::default()`, alpha = 0).
     pub fn new(width: u32, height: u32) -> Self {
+        let len = (width as usize)
+            .checked_mul(height as usize)
+            .expect("Canvas dimensions too large: width * height overflows usize");
         Self {
             width,
             height,
-            pixels: vec![Color::default(); (width * height) as usize],
+            pixels: vec![Color::default(); len],
         }
     }
 
@@ -120,21 +123,27 @@ impl Canvas {
         self.height
     }
 
-    /// Returns the color at `(x, y)`, or `None` if out of bounds.
-    pub fn pixel(&self, x: u32, y: u32) -> Option<Color> {
+    /// Row-major pixel index for `(x, y)`, or `None` if out of bounds. Centralizes the
+    /// bounds check and index arithmetic — done in `usize` so it can't overflow the way
+    /// a `u32` `y * width + x` computation could for very large canvases.
+    fn index(&self, x: u32, y: u32) -> Option<usize> {
         if x >= self.width || y >= self.height {
             return None;
         }
-        self.pixels.get((y * self.width + x) as usize).copied()
+        Some(y as usize * self.width as usize + x as usize)
+    }
+
+    /// Returns the color at `(x, y)`, or `None` if out of bounds.
+    pub fn pixel(&self, x: u32, y: u32) -> Option<Color> {
+        self.index(x, y).map(|i| self.pixels[i])
     }
 
     /// Sets the color at `(x, y)`. Silently ignores out-of-bounds coordinates — there's
     /// nothing a caller needs recover from, so this isn't a `Result`.
     pub fn set_pixel(&mut self, x: u32, y: u32, color: Color) {
-        if x >= self.width || y >= self.height {
-            return;
+        if let Some(i) = self.index(x, y) {
+            self.pixels[i] = color;
         }
-        self.pixels[(y * self.width + x) as usize] = color;
     }
 
     /// Draws `text` starting at `origin` (top-left of the first glyph) using `style`.
@@ -142,26 +151,43 @@ impl Canvas {
     /// v0's built-in font covers only space, digits, and uppercase `A`-`Z` (see the
     /// `font` module) — unsupported characters (lowercase, punctuation, non-ASCII) are
     /// skipped, leaving a blank glyph-width gap so surrounding text stays aligned.
+    ///
+    /// All coordinate/scale arithmetic is done in `i64` — wide enough that no
+    /// `u32`/`i32`-representable `origin`, canvas size, or `TextStyle::scale` can
+    /// overflow it — and each glyph's scaled block is intersected with the canvas
+    /// bounds before iterating its destination pixels, rather than iterating every
+    /// `scale²` pixel and discarding out-of-bounds ones one at a time.
     pub fn draw_text(&mut self, text: &str, origin: Point, style: &TextStyle) {
-        let scale = style.scale.max(1);
-        let advance = ((font::GLYPH_WIDTH + 1) * scale) as i32;
-        let mut cursor_x = origin.x;
+        let scale = style.scale.max(1) as i64;
+        let advance = (font::GLYPH_WIDTH as i64 + 1) * scale;
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let origin_y = origin.y as i64;
+        let mut cursor_x = origin.x as i64;
+
         for ch in text.chars() {
+            if cursor_x >= canvas_w {
+                break; // everything further right is off-canvas; nothing more to draw
+            }
             if let Some(rows) = font::glyph(ch) {
                 for (row_idx, row) in rows.iter().enumerate() {
+                    let py0 = origin_y + row_idx as i64 * scale;
+                    if py0 + scale <= 0 || py0 >= canvas_h {
+                        continue; // this glyph row is entirely above/below the canvas
+                    }
                     for (col_idx, pixel) in row.chars().enumerate() {
                         if pixel != '#' {
                             continue;
                         }
-                        let px0 = cursor_x + (col_idx as u32 * scale) as i32;
-                        let py0 = origin.y + (row_idx as u32 * scale) as i32;
-                        for dy in 0..scale {
-                            for dx in 0..scale {
-                                let px = px0 + dx as i32;
-                                let py = py0 + dy as i32;
-                                if px >= 0 && py >= 0 {
-                                    self.set_pixel(px as u32, py as u32, style.color);
-                                }
+                        let px0 = cursor_x + col_idx as i64 * scale;
+                        if px0 + scale <= 0 || px0 >= canvas_w {
+                            continue; // this glyph column is entirely off the left/right edge
+                        }
+                        let (y_lo, y_hi) = (py0.max(0), (py0 + scale).min(canvas_h));
+                        let (x_lo, x_hi) = (px0.max(0), (px0 + scale).min(canvas_w));
+                        for py in y_lo..y_hi {
+                            for px in x_lo..x_hi {
+                                self.set_pixel(px as u32, py as u32, style.color);
                             }
                         }
                     }
@@ -177,6 +203,7 @@ impl Canvas {
 pub struct TextStyle {
     pub color: Color,
     /// Integer pixel-scale factor for each font pixel (1 = native 3x5 glyph size).
+    /// `draw_text` clamps `0` up to `1` — there's no such thing as zero-size text.
     pub scale: u32,
 }
 
@@ -335,5 +362,23 @@ mod tests {
         }
         // 'I' should render shifted by one glyph advance (GLYPH_WIDTH + 1 = 4)
         assert_eq!(c.pixel(4, 0), Some(style.color));
+    }
+
+    #[test]
+    fn draw_text_huge_scale_does_not_overflow_or_panic() {
+        let mut c = Canvas::new(3, 3);
+        let style = TextStyle {
+            color: Color::rgb(1, 1, 1),
+            scale: u32::MAX,
+        };
+        // Previously, computing `advance`/pixel coordinates in u32/i32 could overflow
+        // and panic for a scale this large. This must complete without panicking; the
+        // resulting glyph block is enormous and clipped to the canvas, so it fills it.
+        c.draw_text("I", Point::new(0, 0), &style);
+        for y in 0..3 {
+            for x in 0..3 {
+                assert_eq!(c.pixel(x, y), Some(style.color), "at ({x},{y})");
+            }
+        }
     }
 }
