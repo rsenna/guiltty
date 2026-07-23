@@ -106,6 +106,10 @@ impl Canvas {
     /// # Panics
     /// Panics if `width * height` overflows `usize` — on 32-bit targets (where `usize`
     /// is only 32 bits wide) this can happen well below `u32::MAX` on either dimension.
+    ///
+    /// Also panics if the resulting `Vec<Color>` allocation exceeds the platform's
+    /// maximum capacity — dimensions whose pixel count fits `usize` may still overflow
+    /// available memory when multiplied by `size_of::<Color>()`.
     pub fn new(width: u32, height: u32) -> Self {
         let len = (width as usize)
             .checked_mul(height as usize)
