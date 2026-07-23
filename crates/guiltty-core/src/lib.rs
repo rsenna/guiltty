@@ -383,22 +383,23 @@ impl Canvas {
         }
     }
 
-    /// Bresenham's line algorithm — no anti-aliasing, one pixel wide. Coordinate math is
-    /// done in `i64` (wide enough that no `i32` `Point` pair can overflow it). Skips the
-    /// walk entirely when the segment's bounding box doesn't touch the canvas at all, so
-    /// an enormous line that's completely off-screen doesn't still step through it pixel
-    /// by pixel; a line that's partially visible still walks its full length (precise
-    /// per-segment clipping is a follow-up, not needed for correctness).
+    /// Bresenham's line algorithm — no anti-aliasing, one pixel wide. The segment is
+    /// clipped to canvas bounds first (via [`liang_barsky_clip`]), so an extremely long
+    /// or mostly-offscreen line only ever walks pixels that could actually land on the
+    /// canvas, rather than potentially billions of invisible steps.
     fn stroke_line(&mut self, from: Point, to: Point, color: Color) {
         let canvas_w = self.width as i64;
         let canvas_h = self.height as i64;
-        let (x1, y1) = (to.x as i64, to.y as i64);
-        let mut x0 = from.x as i64;
-        let mut y0 = from.y as i64;
-
-        if x0.max(x1) < 0 || x0.min(x1) >= canvas_w || y0.max(y1) < 0 || y0.min(y1) >= canvas_h {
+        let Some((mut x0, mut y0, x1, y1)) = liang_barsky_clip(
+            from.x as i64,
+            from.y as i64,
+            to.x as i64,
+            to.y as i64,
+            canvas_w,
+            canvas_h,
+        ) else {
             return;
-        }
+        };
 
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
@@ -461,9 +462,12 @@ impl Canvas {
     }
 
     /// Filled ellipse; a circle is the `rx == ry` case (see [`Shape::Circle`]). The scan
-    /// range is clipped to canvas bounds up front (same reasoning as `fill_rect`), and the
-    /// inclusion test is done in `i128` — the cross-multiplied `i64` version overflows for
-    /// radii above roughly 46_000, which `u32` radii can represent.
+    /// range is clipped to canvas bounds up front (same reasoning as `fill_rect`). The
+    /// inclusion test is done in `f64` as `(dx/rx)^2 + (dy/ry)^2 <= 1` rather than
+    /// cross-multiplied integers — `u32::MAX`-sized radii overflow even `i128` in the
+    /// cross-multiplied form (`rx^2*ry^2 + ry^2*rx^2` can exceed `u128::MAX` at the
+    /// bounding-box corners), while every value here is an exact `f64` integer (well
+    /// under 2^53), so the division introduces no meaningful rasterization error.
     fn fill_ellipse(&mut self, center: Point, rx: u32, ry: u32, color: Color) {
         if rx == 0 || ry == 0 {
             return;
@@ -472,8 +476,7 @@ impl Canvas {
         let canvas_h = self.height as i64;
         let (cx, cy) = (center.x as i64, center.y as i64);
         let (rx64, ry64) = (rx as i64, ry as i64);
-        let (rx128, ry128) = (rx as i128, ry as i128);
-        let rr128 = rx128 * rx128 * ry128 * ry128;
+        let (rxf, ryf) = (rx as f64, ry as f64);
 
         let y_lo = (cy - ry64).max(0);
         let y_hi = (cy + ry64).min(canvas_h - 1);
@@ -481,12 +484,10 @@ impl Canvas {
         let x_hi = (cx + rx64).min(canvas_w - 1);
 
         for y in y_lo..=y_hi {
-            let dy = y - cy;
+            let dyr = (y - cy) as f64 / ryf;
             for x in x_lo..=x_hi {
-                let dx = x - cx;
-                // (dx/rx)^2 + (dy/ry)^2 <= 1, cross-multiplied to stay in integers.
-                let lhs = (dx as i128) * (dx as i128) * ry128 * ry128 + (dy as i128) * (dy as i128) * rx128 * rx128;
-                if lhs <= rr128 {
+                let dxr = (x - cx) as f64 / rxf;
+                if dxr * dxr + dyr * dyr <= 1.0 {
                     self.set_pixel(x as u32, y as u32, color);
                 }
             }
@@ -513,6 +514,64 @@ impl Canvas {
             }
         }
     }
+}
+
+/// Clips the segment `(x0,y0)-(x1,y1)` to `[0,w) x [0,h)` via Liang-Barsky, returning the
+/// clipped integer endpoints, or `None` if the segment doesn't intersect the canvas at
+/// all. Used by `stroke_line` so an extreme-but-valid `Point` pair (e.g. one endpoint at
+/// `i32::MAX`) can't force a Bresenham walk of billions of steps — the walk only ever
+/// covers the (canvas-bounded) visible portion of the segment.
+fn liang_barsky_clip(x0: i64, y0: i64, x1: i64, y1: i64, w: i64, h: i64) -> Option<(i64, i64, i64, i64)> {
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    let dx = (x1 - x0) as f64;
+    let dy = (y1 - y0) as f64;
+    let mut t0 = 0.0f64;
+    let mut t1 = 1.0f64;
+    // (p, q) pairs for the left/right/top/bottom boundaries, in Liang-Barsky's form.
+    let checks = [
+        (-dx, x0 as f64),
+        (dx, (w - 1 - x0) as f64),
+        (-dy, y0 as f64),
+        (dy, (h - 1 - y0) as f64),
+    ];
+    for (p, q) in checks {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None; // parallel to this boundary and outside it
+            }
+        } else {
+            let r = q / p;
+            if p < 0.0 {
+                if r > t1 {
+                    return None;
+                }
+                if r > t0 {
+                    t0 = r;
+                }
+            } else {
+                if r < t0 {
+                    return None;
+                }
+                if r < t1 {
+                    t1 = r;
+                }
+            }
+        }
+    }
+    if t0 > t1 {
+        return None;
+    }
+    let clamp = |t: f64| -> (i64, i64) {
+        (
+            (x0 as f64 + t * dx).round() as i64,
+            (y0 as f64 + t * dy).round() as i64,
+        )
+    };
+    let (cx0, cy0) = clamp(t0);
+    let (cx1, cy1) = clamp(t1);
+    Some((cx0, cy0, cx1, cy1))
 }
 
 /// Sign of the cross product `(p2 - p1) x (p - p1)`; used by [`point_in_triangle`] to
@@ -761,6 +820,38 @@ mod tests {
     }
 
     #[test]
+    fn draw_shape_max_radius_ellipse_does_not_overflow_or_panic() {
+        let mut c = Canvas::new(4, 4);
+        let color = Color::rgb(5, 5, 5);
+        // rx^2*ry^2 + ry^2*rx^2 at the bounding-box corners exceeds even u128::MAX when
+        // rx == ry == u32::MAX; the f64-based inclusion test has no such limit.
+        c.draw_shape(
+            &Shape::circle(Point::new(2, 2), u32::MAX),
+            Fill::solid(color),
+        );
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(c.pixel(x, y), Some(color), "at ({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn draw_shape_line_extreme_endpoint_does_not_hang() {
+        let mut c = Canvas::new(4, 1);
+        let color = Color::rgb(6, 6, 6);
+        // Without clipping to canvas bounds first, Bresenham would walk roughly
+        // i32::MAX steps to reach the (invisible) far endpoint.
+        c.draw_shape(
+            &Shape::line(Point::new(0, 0), Point::new(i32::MAX, 0)),
+            Fill::solid(color),
+        );
+        for x in 0..4 {
+            assert_eq!(c.pixel(x, 0), Some(color), "at x={x}");
+        }
+    }
+
+    #[test]
     fn draw_shape_triangle_extreme_coordinates_does_not_overflow_or_panic() {
         let mut c = Canvas::new(4, 4);
         let color = Color::rgb(2, 2, 2);
@@ -768,16 +859,17 @@ mod tests {
         // this must complete without panicking.
         c.draw_shape(
             &Shape::triangle(
-                Point::new(-10, -10),
-                Point::new(i32::MAX, -10),
-                Point::new(-10, i32::MAX),
+                Point::new(i32::MAX, i32::MAX),
+                Point::new(i32::MIN, i32::MAX),
+                Point::new(i32::MAX, i32::MIN),
             ),
             Fill::solid(color),
         );
-        // The canvas is a tiny corner of this enormous triangle, comfortably inside near
-        // vertex (-10, -10) — negligible relative to the triangle's i32::MAX-scale extent.
-        // The other two vertices still span the full i32 magnitude range, exercising the
-        // same overflow-prone edge_sign computation.
+        // All three vertices sit at the extremes of the i32 domain (not just one, as in an
+        // earlier version of this test), so edge_sign's cross-product terms are evaluated
+        // near their largest possible magnitude. The hypotenuse is the line x + y = -1
+        // (i32::MIN + i32::MAX); this canvas's corner sits on the same side as (MAX, MAX),
+        // comfortably inside.
         for y in 0..4 {
             for x in 0..4 {
                 assert_eq!(c.pixel(x, y), Some(color), "at ({x},{y})");
