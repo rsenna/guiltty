@@ -102,6 +102,10 @@ pub struct Canvas {
 impl Canvas {
     /// Creates a canvas of the given size, every pixel starting fully transparent
     /// (`Color::default()`, alpha = 0).
+    ///
+    /// # Panics
+    /// Panics if `width * height` overflows `usize` — on 32-bit targets (where `usize`
+    /// is only 32 bits wide) this can happen well below `u32::MAX` on either dimension.
     pub fn new(width: u32, height: u32) -> Self {
         let len = (width as usize)
             .checked_mul(height as usize)
