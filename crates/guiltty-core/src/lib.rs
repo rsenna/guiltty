@@ -383,18 +383,31 @@ impl Canvas {
         }
     }
 
-    /// Bresenham's line algorithm — no anti-aliasing, one pixel wide.
+    /// Bresenham's line algorithm — no anti-aliasing, one pixel wide. Coordinate math is
+    /// done in `i64` (wide enough that no `i32` `Point` pair can overflow it). Skips the
+    /// walk entirely when the segment's bounding box doesn't touch the canvas at all, so
+    /// an enormous line that's completely off-screen doesn't still step through it pixel
+    /// by pixel; a line that's partially visible still walks its full length (precise
+    /// per-segment clipping is a follow-up, not needed for correctness).
     fn stroke_line(&mut self, from: Point, to: Point, color: Color) {
-        let (mut x0, mut y0) = (from.x, from.y);
-        let (x1, y1) = (to.x, to.y);
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let (x1, y1) = (to.x as i64, to.y as i64);
+        let mut x0 = from.x as i64;
+        let mut y0 = from.y as i64;
+
+        if x0.max(x1) < 0 || x0.min(x1) >= canvas_w || y0.max(y1) < 0 || y0.min(y1) >= canvas_h {
+            return;
+        }
+
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
-        let sx = if x0 < x1 {
+        let sx: i64 = if x0 < x1 {
             1
         } else {
             -1
         };
-        let sy = if y0 < y1 {
+        let sy: i64 = if y0 < y1 {
             1
         } else {
             -1
@@ -430,47 +443,71 @@ impl Canvas {
         }
     }
 
+    /// Fills a rectangle, clipped to canvas bounds up front (so a huge or far-offscreen
+    /// rectangle doesn't still iterate its full, mostly-invisible extent) and computed in
+    /// `i64` to avoid overflow for extreme `origin`/`width`/`height` combinations.
     fn fill_rect(&mut self, origin: Point, width: u32, height: u32, color: Color) {
-        for dy in 0..height {
-            for dx in 0..width {
-                let x = origin.x + dx as i32;
-                let y = origin.y + dy as i32;
-                if x >= 0 && y >= 0 {
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let x0 = origin.x as i64;
+        let y0 = origin.y as i64;
+        let x_hi = (x0 + width as i64).min(canvas_w);
+        let y_hi = (y0 + height as i64).min(canvas_h);
+        for y in y0.max(0)..y_hi {
+            for x in x0.max(0)..x_hi {
+                self.set_pixel(x as u32, y as u32, color);
+            }
+        }
+    }
+
+    /// Filled ellipse; a circle is the `rx == ry` case (see [`Shape::Circle`]). The scan
+    /// range is clipped to canvas bounds up front (same reasoning as `fill_rect`), and the
+    /// inclusion test is done in `i128` — the cross-multiplied `i64` version overflows for
+    /// radii above roughly 46_000, which `u32` radii can represent.
+    fn fill_ellipse(&mut self, center: Point, rx: u32, ry: u32, color: Color) {
+        if rx == 0 || ry == 0 {
+            return;
+        }
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let (cx, cy) = (center.x as i64, center.y as i64);
+        let (rx64, ry64) = (rx as i64, ry as i64);
+        let (rx128, ry128) = (rx as i128, ry as i128);
+        let rr128 = rx128 * rx128 * ry128 * ry128;
+
+        let y_lo = (cy - ry64).max(0);
+        let y_hi = (cy + ry64).min(canvas_h - 1);
+        let x_lo = (cx - rx64).max(0);
+        let x_hi = (cx + rx64).min(canvas_w - 1);
+
+        for y in y_lo..=y_hi {
+            let dy = y - cy;
+            for x in x_lo..=x_hi {
+                let dx = x - cx;
+                // (dx/rx)^2 + (dy/ry)^2 <= 1, cross-multiplied to stay in integers.
+                let lhs = (dx as i128) * (dx as i128) * ry128 * ry128 + (dy as i128) * (dy as i128) * rx128 * rx128;
+                if lhs <= rr128 {
                     self.set_pixel(x as u32, y as u32, color);
                 }
             }
         }
     }
 
-    /// Filled ellipse; a circle is the `rx == ry` case (see [`Shape::Circle`]).
-    fn fill_ellipse(&mut self, center: Point, rx: u32, ry: u32, color: Color) {
-        if rx == 0 || ry == 0 {
-            return;
-        }
-        let (rx, ry) = (rx as i64, ry as i64);
-        for dy in -ry..=ry {
-            for dx in -rx..=rx {
-                // (dx/rx)^2 + (dy/ry)^2 <= 1, cross-multiplied to stay in integers.
-                if dx * dx * ry * ry + dy * dy * rx * rx <= rx * rx * ry * ry {
-                    let x = center.x + dx as i32;
-                    let y = center.y + dy as i32;
-                    if x >= 0 && y >= 0 {
-                        self.set_pixel(x as u32, y as u32, color);
-                    }
-                }
-            }
-        }
-    }
-
+    /// Fills a triangle via a barycentric sign test, scanning only the triangle's
+    /// bounding box intersected with canvas bounds (so an offscreen or oversized triangle
+    /// doesn't scan its full, mostly-invisible extent). Coordinates stay in `i64` all the
+    /// way to `set_pixel` — never downcast to `i32` — so no precision is lost even for a
+    /// canvas wider than `i32::MAX`.
     fn fill_triangle(&mut self, a: Point, b: Point, c: Point, color: Color) {
-        let min_x = a.x.min(b.x).min(c.x).max(0);
-        let max_x = a.x.max(b.x).max(c.x);
-        let min_y = a.y.min(b.y).min(c.y).max(0);
-        let max_y = a.y.max(b.y).max(c.y);
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let min_x = (a.x.min(b.x).min(c.x) as i64).max(0);
+        let max_x = (a.x.max(b.x).max(c.x) as i64).min(canvas_w - 1);
+        let min_y = (a.y.min(b.y).min(c.y) as i64).max(0);
+        let max_y = (a.y.max(b.y).max(c.y) as i64).min(canvas_h - 1);
         for y in min_y..=max_y {
             for x in min_x..=max_x {
-                let p = Point::new(x, y);
-                if point_in_triangle(p, a, b, c) && x >= 0 && y >= 0 {
+                if point_in_triangle(x, y, a, b, c) {
                     self.set_pixel(x as u32, y as u32, color);
                 }
             }
@@ -479,15 +516,21 @@ impl Canvas {
 }
 
 /// Sign of the cross product `(p2 - p1) x (p - p1)`; used by [`point_in_triangle`] to
-/// tell which side of edge `p1`-`p2` the point `p` is on.
-fn edge_sign(p: Point, p1: Point, p2: Point) -> i64 {
-    (p.x as i64 - p2.x as i64) * (p1.y as i64 - p2.y as i64) - (p1.x as i64 - p2.x as i64) * (p.y as i64 - p2.y as i64)
+/// tell which side of edge `p1`-`p2` the point `(px, py)` is on. Widened to `i128` so a
+/// triangle spanning the full `i32` coordinate range can't overflow the cross-product
+/// terms (an `i64` version can, for points near the domain's extremes).
+fn edge_sign(px: i64, py: i64, p1: Point, p2: Point) -> i128 {
+    let dx_edge = i128::from(p2.x) - i128::from(p1.x);
+    let dy_edge = i128::from(p2.y) - i128::from(p1.y);
+    let dx_point = i128::from(px) - i128::from(p1.x);
+    let dy_point = i128::from(py) - i128::from(p1.y);
+    dx_edge * dy_point - dy_edge * dx_point
 }
 
-fn point_in_triangle(p: Point, a: Point, b: Point, c: Point) -> bool {
-    let d1 = edge_sign(p, a, b);
-    let d2 = edge_sign(p, b, c);
-    let d3 = edge_sign(p, c, a);
+fn point_in_triangle(px: i64, py: i64, a: Point, b: Point, c: Point) -> bool {
+    let d1 = edge_sign(px, py, a, b);
+    let d2 = edge_sign(px, py, b, c);
+    let d3 = edge_sign(px, py, c, a);
     let has_neg = d1 < 0 || d2 < 0 || d3 < 0;
     let has_pos = d1 > 0 || d2 > 0 || d3 > 0;
     !(has_neg && has_pos)
@@ -664,8 +707,9 @@ mod tests {
         assert_eq!(c.pixel(0, 0), Some(color));
         assert_eq!(c.pixel(3, 0), Some(color));
         assert_eq!(c.pixel(3, 3), Some(color));
-        // open path: no segment connects (3,3) back to (0,0)
-        assert_eq!(c.pixel(0, 3), Some(Color::default()));
+        // open path: no segment connects (3,3) back to (0,0); (1,1) sits on where the
+        // closing segment would pass, so it's the meaningful pixel to check stays blank
+        assert_eq!(c.pixel(1, 1), Some(Color::default()));
     }
 
     #[test]
@@ -697,6 +741,46 @@ mod tests {
         for y in 0..3 {
             for x in 0..3 {
                 assert_eq!(c.pixel(x, y), Some(style.color), "at ({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn draw_shape_large_ellipse_radius_does_not_overflow_or_panic() {
+        let mut c = Canvas::new(4, 4);
+        let color = Color::rgb(1, 1, 1);
+        // rx * rx * ry * ry alone (60_000^4) already exceeds i64::MAX; previously this
+        // overflowed (and panicked in debug) inside the cross-multiplied inclusion test.
+        c.draw_shape(&Shape::circle(Point::new(2, 2), 60_000), Fill::solid(color));
+        // The canvas is tiny relative to the radius, so it's entirely inside the circle.
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(c.pixel(x, y), Some(color), "at ({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn draw_shape_triangle_extreme_coordinates_does_not_overflow_or_panic() {
+        let mut c = Canvas::new(4, 4);
+        let color = Color::rgb(2, 2, 2);
+        // Cross-product terms in the old i64 edge_sign overflow for points this far apart;
+        // this must complete without panicking.
+        c.draw_shape(
+            &Shape::triangle(
+                Point::new(-10, -10),
+                Point::new(i32::MAX, -10),
+                Point::new(-10, i32::MAX),
+            ),
+            Fill::solid(color),
+        );
+        // The canvas is a tiny corner of this enormous triangle, comfortably inside near
+        // vertex (-10, -10) — negligible relative to the triangle's i32::MAX-scale extent.
+        // The other two vertices still span the full i32 magnitude range, exercising the
+        // same overflow-prone edge_sign computation.
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(c.pixel(x, y), Some(color), "at ({x},{y})");
             }
         }
     }
