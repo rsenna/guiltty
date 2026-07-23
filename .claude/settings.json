@@ -14,5 +14,39 @@
     "commit-commands@claude-plugins-official": true,
     "desktop-commander@claude-plugins-official": true,
     "supermemory@supermemory-plugins": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__plugin_woz_code__Search",
+      "mcp__context7__query-docs",
+      "Bash(cargo test)",
+      "Bash(cargo test *)",
+      "Bash(cargo build)",
+      "Bash(cargo build *)",
+      "Bash(git check-ignore *)",
+      "mcp__plugin_woz_code__Edit",
+      "Bash(cargo clippy)",
+      "Bash(cargo clippy *)",
+      "Bash(node)",
+      "Bash(node *)",
+      "Bash(python3)",
+      "Bash(python3 *)",
+      "Bash(npx)",
+      "Bash(npx *)",
+      "Bash(git add)",
+      "Bash(git add *)",
+      "Bash(git commit)",
+      "Bash(git commit *)",
+      "Bash(git switch)",
+      "Bash(git switch *)",
+      "Bash(git checkout)",
+      "Bash(git checkout *)",
+      "Bash(chmod)",
+      "Bash(chmod *)",
+      "Bash(mix)",
+      "Bash(mix *)",
+      "Bash(make)",
+      "Bash(make *)"
+    ]
   }
 }

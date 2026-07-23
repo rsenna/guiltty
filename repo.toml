@@ -1,0 +1,7 @@
+full-name = "guiltty"
+main-language = "Rust"
+created = "2026-07-22T11:29:35+02:00"
+updated = "2026-07-23T14:04:10+02:00"
+favorite = true
+flags = ["graphics", "terminal", "2d"]
+description = "Rust library for drawing real, pixel-level 2D graphics into a terminal"
