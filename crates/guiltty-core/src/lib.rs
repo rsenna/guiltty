@@ -517,9 +517,8 @@ impl Canvas {
 }
 
 /// A small RGBA8 image used as sprite content. Structurally similar to `Canvas`'s pixel
-/// buffer, but represents drawable material rather than a render target. v0 has no
-/// file-loading (e.g. PNG decoding) — that needs an external dependency, which per the
-/// spec's boundaries requires asking first — so bitmaps are built in-memory for now.
+/// buffer, but represents drawable material rather than a render target. v0 only
+/// supports building bitmaps in-memory — there's no file/PNG loading yet.
 #[derive(Debug, Clone)]
 pub struct Bitmap {
     width: u32,
@@ -534,9 +533,7 @@ impl Bitmap {
     /// Panics if `pixels.len() != width * height`, or if `width * height` overflows
     /// `usize` (see [`Canvas::new`]'s panic contract, which mirrors this one).
     pub fn new(width: u32, height: u32, pixels: Vec<Color>) -> Self {
-        let expected = (width as usize)
-            .checked_mul(height as usize)
-            .expect("Bitmap dimensions too large: width * height overflows usize");
+        let expected = Self::checked_len(width, height);
         assert_eq!(
             pixels.len(),
             expected,
@@ -553,14 +550,24 @@ impl Bitmap {
 
     /// Creates a bitmap of the given size, every pixel set to `color`.
     pub fn solid(width: u32, height: u32, color: Color) -> Self {
-        let len = (width as usize)
-            .checked_mul(height as usize)
-            .expect("Bitmap dimensions too large: width * height overflows usize");
+        let len = Self::checked_len(width, height);
         Self {
             width,
             height,
             pixels: vec![color; len],
         }
+    }
+
+    /// `width * height` as a `usize`, converting each dimension with a checked cast first
+    /// (rather than a truncating `as usize`) so this can't silently disagree with the
+    /// `u32` dimensions on a target where `usize` is narrower than `u32`.
+    fn checked_len(width: u32, height: u32) -> usize {
+        let w: usize = width.try_into().expect("Bitmap width too large for usize");
+        let h: usize = height
+            .try_into()
+            .expect("Bitmap height too large for usize");
+        w.checked_mul(h)
+            .expect("Bitmap dimensions too large: width * height overflows usize")
     }
 
     /// Bitmap width in pixels.
@@ -573,30 +580,49 @@ impl Bitmap {
         self.height
     }
 
-    /// Returns the color at `(x, y)`, or `None` if out of bounds.
-    pub fn pixel(&self, x: u32, y: u32) -> Option<Color> {
+    /// Row-major pixel index for `(x, y)`, or `None` if out of bounds — mirrors
+    /// `Canvas::index`.
+    fn index(&self, x: u32, y: u32) -> Option<usize> {
         if x >= self.width || y >= self.height {
             return None;
         }
-        self.pixels
-            .get(y as usize * self.width as usize + x as usize)
-            .copied()
+        Some(y as usize * self.width as usize + x as usize)
+    }
+
+    /// Returns the color at `(x, y)`, or `None` if out of bounds.
+    pub fn pixel(&self, x: u32, y: u32) -> Option<Color> {
+        self.index(x, y).map(|i| self.pixels[i])
     }
 }
 
-/// A movable 2D bitmap positioned over a canvas. Fully transparent pixels (`alpha == 0`)
-/// in the bitmap don't overwrite whatever's beneath them when drawn — see
-/// [`Canvas::draw_sprite`].
+/// The rectangle of canvas pixels a [`Sprite`] last drew over, saved so
+/// [`Canvas::draw_sprite`] can restore them before drawing the sprite again elsewhere.
+#[derive(Debug, Clone)]
+struct DrawnFootprint {
+    x: i64,
+    y: i64,
+    width: u32,
+    height: u32,
+    pixels: Vec<Color>,
+}
+
+/// A movable 2D bitmap positioned over a canvas. See [`Canvas::draw_sprite`] for how
+/// moving and redrawing a sprite avoids leaving a trail of its previous position.
 #[derive(Debug, Clone)]
 pub struct Sprite {
     bitmap: Bitmap,
     position: Point,
+    last_draw: Option<DrawnFootprint>,
 }
 
 impl Sprite {
     /// Creates a sprite from `bitmap`, placed at `position` (top-left of the bitmap).
     pub fn new(bitmap: Bitmap, position: Point) -> Self {
-        Self { bitmap, position }
+        Self {
+            bitmap,
+            position,
+            last_draw: None,
+        }
     }
 
     /// The sprite's current position.
@@ -604,12 +630,9 @@ impl Sprite {
         self.position
     }
 
-    /// Moves the sprite to a new position. This only updates the sprite's own state — it
-    /// doesn't erase whatever an earlier `Canvas::draw_sprite` call drew at the old
-    /// position on a persisted canvas. Redrawing the background before compositing the
-    /// sprite at its new position is the caller's job for now; a per-frame redraw loop
-    /// (a `Terminal`/`Frame` abstraction) that handles this automatically doesn't exist
-    /// yet — that's a follow-up, not this task.
+    /// Moves the sprite to a new position. Takes effect the next time
+    /// [`Canvas::draw_sprite`] is called with this sprite — that call restores whatever
+    /// the sprite covered at its previous position before drawing it at the new one.
     pub fn move_to(&mut self, position: Point) {
         self.position = position;
     }
@@ -622,33 +645,82 @@ impl Sprite {
 
 impl Canvas {
     /// Draws `sprite`'s bitmap onto this canvas at its current position, clipped to
-    /// canvas bounds. Fully transparent bitmap pixels (`alpha == 0`) are skipped, leaving
-    /// the canvas content beneath them untouched — this is what lets a sprite be drawn
-    /// over existing background content without corrupting it. Non-transparent pixels
-    /// (including partially transparent ones) replace the canvas pixel outright; v0 does
-    /// no alpha blending, matching the no-anti-aliasing precedent set by `draw_shape`.
-    pub fn draw_sprite(&mut self, sprite: &Sprite) {
+    /// canvas bounds.
+    ///
+    /// Uses save-under/restore-under: if `sprite` was drawn by an earlier call to this
+    /// method, whatever the canvas showed at that previous footprint is restored first,
+    /// then the canvas content at the new footprint is captured before the sprite is
+    /// drawn over it. This is what lets a sprite move and be redrawn repeatedly without
+    /// leaving a trail of its old position — **as long as nothing else draws into its
+    /// footprint in between two `draw_sprite` calls for it**; if something does, this
+    /// restore overwrites that intervening content. A real per-frame redraw loop (a
+    /// future `Terminal`/`Frame` abstraction redrawing the whole scene from scratch each
+    /// frame) wouldn't have that limitation; this is the simpler, self-contained
+    /// mechanism available today. Each `Sprite` only remembers its own last footprint —
+    /// drawing a different sprite, or drawing this one onto a different `Canvas`, doesn't
+    /// know about or restore anything another sprite painted over the same area.
+    ///
+    /// Within the new footprint, fully transparent bitmap pixels (`alpha == 0`) are
+    /// skipped rather than overwriting the canvas; non-transparent pixels replace
+    /// outright (no alpha blending, matching the no-anti-aliasing precedent set by
+    /// `draw_shape`).
+    pub fn draw_sprite(&mut self, sprite: &mut Sprite) {
         let canvas_w = self.width as i64;
         let canvas_h = self.height as i64;
-        let bmp = &sprite.bitmap;
-        let (px, py) = (sprite.position.x as i64, sprite.position.y as i64);
 
-        let x_lo = px.max(0);
-        let x_hi = (px + bmp.width as i64).min(canvas_w);
-        let y_lo = py.max(0);
-        let y_hi = (py + bmp.height as i64).min(canvas_h);
-
-        for y in y_lo..y_hi {
-            let by = (y - py) as u32;
-            for x in x_lo..x_hi {
-                let bx = (x - px) as u32;
-                if let Some(color) = bmp.pixel(bx, by) {
-                    if color.a != 0 {
-                        self.set_pixel(x as u32, y as u32, color);
+        if let Some(prev) = sprite.last_draw.take() {
+            let row_len = prev.width as usize;
+            for dy in 0..prev.height as i64 {
+                let y = prev.y + dy;
+                if y < 0 || y >= canvas_h {
+                    continue;
+                }
+                let row = dy as usize * row_len;
+                for dx in 0..prev.width as i64 {
+                    let x = prev.x + dx;
+                    if x < 0 || x >= canvas_w {
+                        continue;
                     }
+                    self.set_pixel(x as u32, y as u32, prev.pixels[row + dx as usize]);
                 }
             }
         }
+
+        let (px, py) = (sprite.position.x as i64, sprite.position.y as i64);
+        let bmp_w = sprite.bitmap.width as i64;
+        let bmp_h = sprite.bitmap.height as i64;
+        let x_lo = px.max(0);
+        let x_hi = (px + bmp_w).min(canvas_w);
+        let y_lo = py.max(0);
+        let y_hi = (py + bmp_h).min(canvas_h);
+        let cap_w = (x_hi - x_lo).max(0) as usize;
+        let cap_h = (y_hi - y_lo).max(0) as usize;
+        let mut saved = Vec::with_capacity(cap_w * cap_h);
+
+        let canvas_row_len = self.width as usize;
+        let bmp_row_len = sprite.bitmap.width as usize;
+        for y in y_lo..y_hi {
+            let canvas_row = y as usize * canvas_row_len;
+            let bmp_row = (y - py) as usize * bmp_row_len;
+            for x in x_lo..x_hi {
+                // In-bounds by construction: x_lo/x_hi/y_lo/y_hi are already clipped to
+                // both canvas and bitmap dimensions, so no bounds check is needed here.
+                let idx = canvas_row + x as usize;
+                saved.push(self.pixels[idx]);
+                let color = sprite.bitmap.pixels[bmp_row + (x - px) as usize];
+                if color.a != 0 {
+                    self.pixels[idx] = color;
+                }
+            }
+        }
+
+        sprite.last_draw = Some(DrawnFootprint {
+            x: x_lo,
+            y: y_lo,
+            width: cap_w as u32,
+            height: cap_h as u32,
+            pixels: saved,
+        });
     }
 }
 
@@ -1060,8 +1132,8 @@ mod tests {
     fn draw_sprite_opaque_pixels_overwrite_background() {
         let mut c = Canvas::new(4, 4);
         c.set_pixel(1, 1, Color::rgb(50, 50, 50)); // pre-existing background content
-        let sprite = Sprite::new(Bitmap::solid(2, 2, Color::rgb(9, 9, 9)), Point::new(1, 1));
-        c.draw_sprite(&sprite);
+        let mut sprite = Sprite::new(Bitmap::solid(2, 2, Color::rgb(9, 9, 9)), Point::new(1, 1));
+        c.draw_sprite(&mut sprite);
         for y in 1..3 {
             for x in 1..3 {
                 assert_eq!(c.pixel(x, y), Some(Color::rgb(9, 9, 9)), "at ({x},{y})");
@@ -1078,8 +1150,8 @@ mod tests {
             1,
             vec![Color::rgba(9, 9, 9, 0)], // fully transparent
         );
-        let sprite = Sprite::new(bitmap, Point::new(1, 1));
-        c.draw_sprite(&sprite);
+        let mut sprite = Sprite::new(bitmap, Point::new(1, 1));
+        c.draw_sprite(&mut sprite);
         // The transparent sprite pixel must not have overwritten the background beneath it.
         assert_eq!(c.pixel(1, 1), Some(Color::rgb(50, 50, 50)));
     }
@@ -1088,8 +1160,8 @@ mod tests {
     fn draw_sprite_clips_to_canvas_bounds_without_panic() {
         let mut c = Canvas::new(2, 2);
         // Sprite mostly off-canvas to the bottom-right; only its top-left pixel is visible.
-        let sprite = Sprite::new(Bitmap::solid(4, 4, Color::rgb(1, 2, 3)), Point::new(1, 1));
-        c.draw_sprite(&sprite);
+        let mut sprite = Sprite::new(Bitmap::solid(4, 4, Color::rgb(1, 2, 3)), Point::new(1, 1));
+        c.draw_sprite(&mut sprite);
         assert_eq!(c.pixel(1, 1), Some(Color::rgb(1, 2, 3)));
         assert_eq!(c.pixel(0, 0), Some(Color::default()));
     }
@@ -1098,9 +1170,35 @@ mod tests {
     fn draw_sprite_negative_position_does_not_panic() {
         let mut c = Canvas::new(2, 2);
         // Sprite anchored off-canvas to the top-left; only its bottom-right pixel is visible.
-        let sprite = Sprite::new(Bitmap::solid(2, 2, Color::rgb(4, 5, 6)), Point::new(-1, -1));
-        c.draw_sprite(&sprite);
+        let mut sprite = Sprite::new(Bitmap::solid(2, 2, Color::rgb(4, 5, 6)), Point::new(-1, -1));
+        c.draw_sprite(&mut sprite);
         assert_eq!(c.pixel(0, 0), Some(Color::rgb(4, 5, 6)));
         assert_eq!(c.pixel(1, 1), Some(Color::default()));
+    }
+
+    #[test]
+    fn draw_sprite_move_and_redraw_restores_old_footprint() {
+        let mut c = Canvas::new(5, 1);
+        c.set_pixel(0, 0, Color::rgb(50, 50, 50)); // pre-existing background at the sprite's start
+        let mut sprite = Sprite::new(Bitmap::solid(1, 1, Color::rgb(9, 9, 9)), Point::new(0, 0));
+        c.draw_sprite(&mut sprite);
+        assert_eq!(c.pixel(0, 0), Some(Color::rgb(9, 9, 9)));
+
+        sprite.move_to(Point::new(4, 0));
+        c.draw_sprite(&mut sprite);
+        // Old position must be restored to what it was before the sprite was ever drawn
+        // there — not left painted with the sprite's color.
+        assert_eq!(c.pixel(0, 0), Some(Color::rgb(50, 50, 50)));
+        // New position now shows the sprite.
+        assert_eq!(c.pixel(4, 0), Some(Color::rgb(9, 9, 9)));
+    }
+
+    #[test]
+    fn draw_sprite_redraw_at_same_position_is_a_noop_change() {
+        let mut c = Canvas::new(3, 1);
+        let mut sprite = Sprite::new(Bitmap::solid(1, 1, Color::rgb(7, 7, 7)), Point::new(1, 0));
+        c.draw_sprite(&mut sprite);
+        c.draw_sprite(&mut sprite); // redraw without moving
+        assert_eq!(c.pixel(1, 0), Some(Color::rgb(7, 7, 7)));
     }
 }
