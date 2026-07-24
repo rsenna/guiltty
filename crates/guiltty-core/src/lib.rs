@@ -424,16 +424,8 @@ impl Canvas {
 
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
-        let sx: i64 = if x0 < x1 {
-            1
-        } else {
-            -1
-        };
-        let sy: i64 = if y0 < y1 {
-            1
-        } else {
-            -1
-        };
+        let sx: i64 = if x0 < x1 { 1 } else { -1 };
+        let sy: i64 = if y0 < y1 { 1 } else { -1 };
         let mut err = dx + dy;
         loop {
             if x0 >= 0 && y0 >= 0 {
@@ -551,7 +543,14 @@ impl Canvas {
 /// all. Used by `stroke_line` so an extreme-but-valid `Point` pair (e.g. one endpoint at
 /// `i32::MAX`) can't force a Bresenham walk of billions of steps — the walk only ever
 /// covers the (canvas-bounded) visible portion of the segment.
-fn liang_barsky_clip(x0: i64, y0: i64, x1: i64, y1: i64, w: i64, h: i64) -> Option<(i64, i64, i64, i64)> {
+fn liang_barsky_clip(
+    x0: i64,
+    y0: i64,
+    x1: i64,
+    y1: i64,
+    w: i64,
+    h: i64,
+) -> Option<(i64, i64, i64, i64)> {
     if w <= 0 || h <= 0 {
         return None;
     }

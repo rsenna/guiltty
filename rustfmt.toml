@@ -1,0 +1,4 @@
+# Pins the project to stable rustfmt defaults (docs/spec.md's Code Style section:
+# "rustfmt defaults"). Without this file, rustfmt falls back to walking up to a
+# contributor's personal ~/.rustfmt.toml if one exists, which silently diverges from CI
+# (which has no such file) -- exactly what happened on this repo's first CI run.
