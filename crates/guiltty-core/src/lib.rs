@@ -736,24 +736,8 @@ impl Canvas {
             // A footprint captured from a *different* canvas has nothing to do with this
             // one's current pixels; restoring it here would corrupt this canvas with
             // stale content from elsewhere, so just drop it instead.
-            if prev.canvas_id != self.id {
-                sprite.last_draw = None;
-            } else {
-                let row_len = prev.width as usize;
-                for dy in 0..prev.height as i64 {
-                    let y = prev.y + dy;
-                    if y < 0 || y >= canvas_h {
-                        continue;
-                    }
-                    let row = dy as usize * row_len;
-                    for dx in 0..prev.width as i64 {
-                        let x = prev.x + dx;
-                        if x < 0 || x >= canvas_w {
-                            continue;
-                        }
-                        self.set_pixel(x as u32, y as u32, prev.pixels[row + dx as usize]);
-                    }
-                }
+            if prev.canvas_id == self.id {
+                self.restore_footprint(&prev);
             }
         }
 
@@ -793,6 +777,28 @@ impl Canvas {
             height: cap_h as u32,
             pixels: saved,
         });
+    }
+
+    /// Restores the canvas pixels a sprite's previous footprint covered, clipped to
+    /// whatever part of that footprint still falls within current canvas bounds.
+    fn restore_footprint(&mut self, prev: &DrawnFootprint) {
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let row_len = prev.width as usize;
+        for dy in 0..prev.height as i64 {
+            let y = prev.y + dy;
+            if y < 0 || y >= canvas_h {
+                continue;
+            }
+            let row = dy as usize * row_len;
+            for dx in 0..prev.width as i64 {
+                let x = prev.x + dx;
+                if x < 0 || x >= canvas_w {
+                    continue;
+                }
+                self.set_pixel(x as u32, y as u32, prev.pixels[row + dx as usize]);
+            }
+        }
     }
 }
 
