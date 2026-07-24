@@ -1,0 +1,4 @@
+# Complexity/nesting thresholds for the lints enabled in the workspace Cargo.toml's
+# [workspace.lints.clippy] table. See docs/spec-ci.md for rationale.
+too-many-lines-threshold = 100
+excessive-nesting-threshold = 6

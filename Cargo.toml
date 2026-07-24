@@ -12,3 +12,10 @@ edition = "2021"
 license = "MIT"
 authors = ["Rogério Senna"]
 repository = "https://github.com/rsenna/guiltty"
+
+[workspace.lints.clippy]
+# Complexity/nesting "easy win" static analysis (docs/spec-ci.md). cognitive_complexity is
+# deliberately NOT enabled here -- it's a `restriction`-group lint and its own docs
+# recommend too_many_lines/excessive_nesting instead, calling itself a misleading metric.
+too_many_lines = "warn"
+excessive_nesting = "warn"

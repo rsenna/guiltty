@@ -178,30 +178,51 @@ impl Canvas {
                 break; // everything further right is off-canvas; nothing more to draw
             }
             if let Some(rows) = font::glyph(ch) {
-                for (row_idx, row) in rows.iter().enumerate() {
-                    let py0 = origin_y + row_idx as i64 * scale;
-                    if py0 + scale <= 0 || py0 >= canvas_h {
-                        continue; // this glyph row is entirely above/below the canvas
-                    }
-                    for (col_idx, pixel) in row.chars().enumerate() {
-                        if pixel != '#' {
-                            continue;
-                        }
-                        let px0 = cursor_x + col_idx as i64 * scale;
-                        if px0 + scale <= 0 || px0 >= canvas_w {
-                            continue; // this glyph column is entirely off the left/right edge
-                        }
-                        let (y_lo, y_hi) = (py0.max(0), (py0 + scale).min(canvas_h));
-                        let (x_lo, x_hi) = (px0.max(0), (px0 + scale).min(canvas_w));
-                        for py in y_lo..y_hi {
-                            for px in x_lo..x_hi {
-                                self.set_pixel(px as u32, py as u32, style.color);
-                            }
-                        }
-                    }
-                }
+                self.draw_glyph(
+                    &rows,
+                    cursor_x,
+                    origin_y,
+                    scale,
+                    canvas_w,
+                    canvas_h,
+                    style.color,
+                );
             }
             cursor_x += advance;
+        }
+    }
+
+    /// Renders one glyph's `'#'` pixels (each scaled to a `scale`x`scale` block) at
+    /// `(cursor_x, origin_y)`. Split out of `draw_text` purely to keep nesting shallow
+    /// there — iterating a glyph's rows/columns is naturally two loops deep on its own.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_glyph(
+        &mut self,
+        rows: &[&str],
+        cursor_x: i64,
+        origin_y: i64,
+        scale: i64,
+        canvas_w: i64,
+        canvas_h: i64,
+        color: Color,
+    ) {
+        for (row_idx, row) in rows.iter().enumerate() {
+            let py0 = origin_y + row_idx as i64 * scale;
+            if py0 + scale <= 0 || py0 >= canvas_h {
+                continue; // this glyph row is entirely above/below the canvas
+            }
+            for (col_idx, pixel) in row.chars().enumerate() {
+                if pixel != '#' {
+                    continue;
+                }
+                let px0 = cursor_x + col_idx as i64 * scale;
+                if px0 + scale <= 0 || px0 >= canvas_w {
+                    continue; // this glyph column is entirely off the left/right edge
+                }
+                let (y_lo, y_hi) = (py0.max(0), (py0 + scale).min(canvas_h));
+                let (x_lo, x_hi) = (px0.max(0), (px0 + scale).min(canvas_w));
+                self.fill_clipped_rect(x_lo, x_hi, y_lo, y_hi, color);
+            }
         }
     }
 }
@@ -403,16 +424,8 @@ impl Canvas {
 
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
-        let sx: i64 = if x0 < x1 {
-            1
-        } else {
-            -1
-        };
-        let sy: i64 = if y0 < y1 {
-            1
-        } else {
-            -1
-        };
+        let sx: i64 = if x0 < x1 { 1 } else { -1 };
+        let sy: i64 = if y0 < y1 { 1 } else { -1 };
         let mut err = dx + dy;
         loop {
             if x0 >= 0 && y0 >= 0 {
@@ -454,8 +467,17 @@ impl Canvas {
         let y0 = origin.y as i64;
         let x_hi = (x0 + width as i64).min(canvas_w);
         let y_hi = (y0 + height as i64).min(canvas_h);
-        for y in y0.max(0)..y_hi {
-            for x in x0.max(0)..x_hi {
+        self.fill_clipped_rect(x0.max(0), x_hi, y0.max(0), y_hi, color);
+    }
+
+    /// Fills the rectangle `[x_lo, x_hi) x [y_lo, y_hi)`, in canvas pixel space, with
+    /// `color`. Callers are responsible for having already clipped this range to canvas
+    /// bounds (an empty range, `x_hi <= x_lo` or `y_hi <= y_lo`, is a harmless no-op).
+    /// Shared by `fill_rect` and `draw_text`'s per-glyph scaled pixel block, so neither
+    /// needs its own nested fill loop.
+    fn fill_clipped_rect(&mut self, x_lo: i64, x_hi: i64, y_lo: i64, y_hi: i64, color: Color) {
+        for y in y_lo..y_hi {
+            for x in x_lo..x_hi {
                 self.set_pixel(x as u32, y as u32, color);
             }
         }
@@ -521,7 +543,14 @@ impl Canvas {
 /// all. Used by `stroke_line` so an extreme-but-valid `Point` pair (e.g. one endpoint at
 /// `i32::MAX`) can't force a Bresenham walk of billions of steps — the walk only ever
 /// covers the (canvas-bounded) visible portion of the segment.
-fn liang_barsky_clip(x0: i64, y0: i64, x1: i64, y1: i64, w: i64, h: i64) -> Option<(i64, i64, i64, i64)> {
+fn liang_barsky_clip(
+    x0: i64,
+    y0: i64,
+    x1: i64,
+    y1: i64,
+    w: i64,
+    h: i64,
+) -> Option<(i64, i64, i64, i64)> {
     if w <= 0 || h <= 0 {
         return None;
     }
