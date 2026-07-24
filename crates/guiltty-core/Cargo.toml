@@ -8,4 +8,7 @@ authors.workspace = true
 repository.workspace = true
 description = "Backend-agnostic canvas, shapes, text, sprites, regions, and zoom/scroll logic for guiltty"
 
+[lints]
+workspace = true
+
 [dependencies]
