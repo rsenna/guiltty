@@ -10,9 +10,9 @@ This repo has no CI at all yet — `cargo fmt`/`clippy`/`test` only ever run loc
 
 | Metric | Value |
 |---|---|
-| Lines | 90.56% (519 total, 49 missed) |
-| Functions | 98.21% (56 total, 1 missed) |
-| Regions | 85.39% (1102 total, 161 missed) |
+| Lines | 90.96% (542 total, 49 missed) |
+| Functions | 98.28% (58 total, 1 missed) |
+| Regions | 85.62% (1120 total, 161 missed) |
 
 `guiltty-kitty` is 100% (a stub crate). The gaps in `guiltty-core` are reasonable, not alarming: `Error`'s `Display` impl is never formatted in a test, several `font` module glyph-table branches aren't individually exercised (only a handful of the 37 characters), and a few defensive early-return branches in `liang_barsky_clip`/`fill_ellipse` (e.g. "line parallel to a boundary") aren't hit by any current test.
 
@@ -25,7 +25,7 @@ This repo has no CI at all yet — `cargo fmt`/`clippy`/`test` only ever run loc
 ## Metric and threshold
 
 - **Metric:** line coverage only (not regions/branches) — simplest to reason about in a CI failure message, the most commonly used metric for this kind of gate.
-- **Threshold:** 90% lines — essentially today's measured level (90.56%). Because the baseline sits slightly above this floor, the gate limits aggregate coverage regressions rather than catching every individual undertested addition immediately; tightening it further is left as future tuning once more headroom is available.
+- **Threshold:** 90% lines — essentially today's measured level (90.96%). Because the baseline sits slightly above this floor, the gate limits aggregate coverage regressions rather than catching every individual undertested addition immediately; tightening it further is left as future tuning once more headroom is available.
 
 ## Tasks
 
