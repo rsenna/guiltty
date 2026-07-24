@@ -9,12 +9,17 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install mise-managed tools (rust, cargo-llvm-cov)
         uses: jdx/mise-action@v4
@@ -25,8 +30,5 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: cargo test
-        run: cargo test --workspace
-
-      - name: cargo llvm-cov (coverage report -- not yet enforced, see docs/spec-ci.md)
+      - name: cargo llvm-cov (also runs the full test suite; coverage not yet enforced, see docs/spec-ci.md)
         run: cargo llvm-cov --workspace --summary-only
