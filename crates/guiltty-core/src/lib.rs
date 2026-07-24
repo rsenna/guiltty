@@ -1,6 +1,7 @@
 //! Backend-agnostic core primitives (`Color`, `Point`, `Rect`) and the [`Backend`] trait that
-//! rendering backends (e.g. `guiltty-kitty`) implement. Canvas, shape, sprite, region, and
-//! zoom/scroll logic described in the spec is not implemented yet — this is the scaffold only.
+//! rendering backends (e.g. `guiltty-kitty`) implement. `Canvas` supports shape drawing, text,
+//! and movable sprites (see [`Canvas::draw_sprite`]); region/zoom/scroll logic described in the
+//! spec is not implemented yet.
 
 /// RGBA8 color, used throughout for canvas pixels, shape fills, and sprite bitmaps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -622,7 +623,7 @@ impl Bitmap {
 /// [`Canvas::draw_sprite`] can restore them before drawing the sprite again elsewhere.
 /// Tagged with the id of the `Canvas` it was captured from, so it's never mistakenly
 /// restored onto a different canvas instance (see `Canvas::draw_sprite`).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct DrawnFootprint {
     canvas_id: u64,
     x: i64,
