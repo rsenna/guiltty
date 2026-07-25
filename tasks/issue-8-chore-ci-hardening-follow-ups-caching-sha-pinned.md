@@ -27,7 +27,7 @@ Dependencies: none.
 - [x] **T2 — Add Cargo/build caching to the quality job** 🔒 — ✅ merged (#11)
 
 Acceptance:
-- `Swatinem/rust-cache` (pinned to SHA `23869a5bd66c73db3c0ac40331f3206eb23791dc` with trailing comment `# v2.9.1`) is added to `.github/workflows/ci.yml`, placed after the mise-action install step and before `cargo fmt`.
+- `Swatinem/rust-cache` (pinned to SHA `23869a5bd66c73db3c0ac40331f3206eb23791dc` with trailing comment `# v2.9.1`) is added to `.github/workflows/ci.yml`, placed after `cargo fmt --check` and before `cargo clippy` (moved here per #11 review feedback: fmt is cheap and needs no cache, so it should fail fast without waiting on cache restore).
 - A second CI run on the same branch with no `Cargo.lock` change restores the cache (visible in the run's "Cache restored" log line) and the registry-download/full-recompile portion of the job is visibly shorter than the cold-cache baseline.
 - `quality` job still runs `fmt`, `clippy`, and `llvm-cov` exactly as before — caching must not change what runs, only how long it takes.
 
