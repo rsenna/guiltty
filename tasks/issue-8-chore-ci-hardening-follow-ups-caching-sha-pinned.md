@@ -12,7 +12,7 @@ Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspa
 Acceptance:
 - `.github/workflows/ci.yml`'s `actions/checkout@v4` step references SHA `11d5960a326750d5838078e36cf38b85af677262` with trailing comment `# v4.4.0`.
 - The `jdx/mise-action@v4` step references SHA `9e7f7633ff6f6d6048a9418a68d48f288f50eb14` with trailing comment `# v4.2.3`.
-- No other workflow behavior changes.
+- No other workflow behavior changes beyond the SHA pins themselves and the runner-OS pin (`ubuntu-latest` → `ubuntu-24.04`) added during review, in the same reproducibility spirit.
 
 Verify:
 - Push the branch and confirm the `quality` job on GitHub Actions completes successfully (fmt/clippy/llvm-cov all green) — a bad SHA fails the checkout/tool-install step immediately.
