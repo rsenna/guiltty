@@ -24,7 +24,7 @@ Dependencies: none.
 
 ---
 
-- [ ] **T2 — Add Cargo/build caching to the quality job** 🔒
+- [x] **T2 — Add Cargo/build caching to the quality job** 🔒 — ✅ merged (#11)
 
 Acceptance:
 - `Swatinem/rust-cache` (pinned to SHA `23869a5bd66c73db3c0ac40331f3206eb23791dc` with trailing comment `# v2.9.1`) is added to `.github/workflows/ci.yml`, placed after the mise-action install step and before `cargo fmt`.
