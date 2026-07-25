@@ -48,9 +48,9 @@ Acceptance:
 - Dependabot is confirmed enabled for the repo (either via this config alone, since GitHub auto-detects `dependabot.yml`, or by checking repo Settings > Code security if the maintainer wants to verify manually).
 
 Verify:
-- `cat .github/dependabot.yml` matches GitHub's documented schema (no CI check exists for this file; validate by eye / `gh api repos/rsenna/guiltty/dependabot-alerts` reachability if desired).
+- `cat .github/dependabot.yml` matches GitHub's documented schema (no CI check exists for this file; validate by eye / `gh api repos/rsenna/guiltty/dependabot/alerts` reachability if desired).
 - Local: same quality-gate commands as T1 (this task doesn't touch Rust code, but the standing rule is to run the gate before considering any task done).
 
 Files: `.github/dependabot.yml` (new)
 
-Dependencies: T1, T2 (Dependabot needs pinned SHAs to have something to update).
+Dependencies: T1 (Dependabot needs pinned SHAs to have something to update; T2's caching is orthogonal and doesn't block this).
