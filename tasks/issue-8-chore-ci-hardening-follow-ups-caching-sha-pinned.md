@@ -7,7 +7,7 @@ Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspa
 
 ---
 
-**T1 — Pin existing actions to reviewed commit SHAs** 🔒
+**T1 — Pin existing actions to reviewed commit SHAs** 🔒 — ✅ merged (#9)
 
 Acceptance:
 - `.github/workflows/ci.yml`'s `actions/checkout@v4` step references SHA `11d5960a326750d5838078e36cf38b85af677262` with trailing comment `# v4.4.0`.
@@ -24,7 +24,7 @@ Dependencies: none.
 
 ---
 
-**T2 — Add Cargo/build caching to the quality job** 🔒
+**T2 — Add Cargo/build caching to the quality job** 🔒 — not started
 
 Acceptance:
 - `Swatinem/rust-cache` (pinned to SHA `23869a5bd66c73db3c0ac40331f3206eb23791dc` with trailing comment `# v2.9.1`) is added to `.github/workflows/ci.yml`, placed after the mise-action install step and before `cargo fmt`.
@@ -41,7 +41,7 @@ Dependencies: T1 (do the SHA-pinning pass once, covering the new action too, rat
 
 ---
 
-**T3 — Configure Dependabot for GitHub Actions** 🔒
+**T3 — Configure Dependabot for GitHub Actions** 🔒 — not started
 
 Acceptance:
 - `.github/dependabot.yml` exists with a `github-actions` ecosystem entry pointed at `/` (or wherever `.github/workflows/` lives relative to repo root), on a reasonable schedule (e.g. weekly).
