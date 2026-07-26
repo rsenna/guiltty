@@ -30,7 +30,7 @@ This repo has no CI at all yet — `cargo fmt`/`clippy`/`test` only ever run loc
 ## Tasks
 
 1. **Stand up CI + report coverage (no gate yet).** A GitHub Actions workflow running `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo llvm-cov --workspace --summary-only` (which also runs the full test suite; coverage is computed and printed in the CI log, not yet enforced). Also adds `clippy.toml` with the complexity-lint thresholds and enables `too_many_lines`/`excessive_nesting` via `[workspace.lints.clippy]`. Landing the gate before ever seeing it run for real in CI risks having to immediately re-tune it if CI's numbers differ even slightly from local (different LLVM/toolchain build, etc.) — this task lets that be observed first.
-2. **Enforce the coverage gate.** Once task 1's workflow has run at least once for real and its measured number is confirmed stable, add `--fail-under-lines 90` to the coverage step so a PR that drops line coverage below 90% fails CI.
+2. **Enforce the coverage gate.** ✅ done — Once task 1's workflow ran for real and its measured number was confirmed stable, `--fail-under-lines 90` was added to the coverage step so a PR that drops line coverage below 90% fails CI.
 
 ## Success Criteria
 

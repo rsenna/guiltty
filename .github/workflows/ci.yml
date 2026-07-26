@@ -33,5 +33,5 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: cargo llvm-cov (also runs the full test suite; coverage not yet enforced, see docs/spec-ci.md)
-        run: cargo llvm-cov --workspace --summary-only
+      - name: cargo llvm-cov (also runs the full test suite; fails if line coverage drops below 90%)
+        run: cargo llvm-cov --workspace --summary-only --fail-under-lines 90
