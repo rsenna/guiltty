@@ -91,7 +91,7 @@ loop {
 
 - **Always:** run `cargo fmt`, `cargo clippy`, and `cargo test --workspace` before considering a task done; keep `guiltty-core` free of any kitty-specific (or any backend-specific) code — backend concerns live only in backend crates; document public API items with doc comments.
 - **Ask first:** adding any new external dependency (especially anything requiring C/FFI); adding a new backend crate; changing the workspace crate boundaries defined above; changing the license.
-- **Never:** let backend-specific code leak into `guiltty-core`; introduce panics on recoverable error paths in public API; commit secrets; remove a failing test without explicit approval.
+- **Never:** let backend-specific code leak into `guiltty-core`; introduce panics on recoverable error paths in public API; commit secrets; remove a failing test without explicit approval; build mouse/event handling, interactive widgets (buttons, clickable elements), or a scriptable CLI binary interface — all explicitly out of scope for v0 per [docs/intent/kitty-graphics-ui-toolkit.md](intent/kitty-graphics-ui-toolkit.md).
 
 ## Success Criteria
 
