@@ -53,7 +53,7 @@ tasks/                  → plan.md and todo.md (populated in the Plan/Tasks pha
 
 Standard Rust idioms: `snake_case` for functions/variables, `CamelCase` for types, `rustfmt` defaults, `clippy` clean with no warnings suppressed without a documented reason. Public API returns `Result<T, guiltty_core::Error>` rather than panicking; panics are reserved for programmer-error invariants (e.g., an out-of-bounds internal index), never for recoverable conditions like a failed terminal write.
 
-Illustrative target shape for the core API (not yet implemented), following ratatui's `Terminal`/`Frame`/`draw()` immediate-mode pattern:
+Illustrative target shape for the core API (not yet implemented), following ratatui's `Terminal`/`Frame`/`draw()` immediate-mode pattern. The `event::read()`/`Event::Key` calls below are illustrative of an application-level input loop (e.g. via `crossterm` or similar) driving *when* to redraw — guiltty itself does not provide mouse/keyboard event handling in v0, per the Boundaries section below.
 
 ```rust
 let mut terminal = guiltty::init()?; // Terminal<KittyBackend>
