@@ -3,7 +3,7 @@
 Source: https://github.com/rsenna/guiltty/issues/8
 Enrichment: issue comment on #8.
 
-Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only`.
+Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90` (CI enforces this floor as of #15; run locally with the same flag to match).
 
 ---
 
@@ -16,7 +16,7 @@ Acceptance:
 
 Verify:
 - Push the branch and confirm the `quality` job on GitHub Actions completes successfully (fmt/clippy/llvm-cov all green) — a bad SHA fails the checkout/tool-install step immediately.
-- Local: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only`.
+- Local: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90`.
 
 Files: `.github/workflows/ci.yml`
 
