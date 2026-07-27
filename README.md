@@ -33,9 +33,9 @@ This project is in the earliest stage of development. What exists today:
 - `guiltty`: a facade crate re-exporting the above.
 
 **Terminal rendering doesn't exist yet** — `KittyBackend::present()` is still a stub, so there's
-no real kitty-protocol wire encoding, no independent viewport regions, no zoom, and no
-scroll/pan for canvases larger than the terminal. See [`docs/spec.md`](docs/spec.md)'s Success
-Criteria for what v0 will include once built, and
+no real kitty-protocol wire encoding, no independent viewport regions, no zoom, no
+scroll/pan for canvases larger than the terminal, and no working end-to-end example. See
+[`docs/spec.md`](docs/spec.md)'s Success Criteria for what v0 will include once built, and
 [`docs/intent/kitty-graphics-ui-toolkit.md`](docs/intent/kitty-graphics-ui-toolkit.md) for the
 confirmed project intent this spec implements.
 

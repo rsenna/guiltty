@@ -3,15 +3,16 @@
 Source: https://github.com/rsenna/guiltty/issues/16
 Enrichment: issue comment on #16.
 
-Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90` (CI enforces this floor as of #15; run locally with the same flag to match).
+Quality gate (code-affecting tasks): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90` (CI enforces this floor as of #15; run locally with the same flag to match).
 
 This issue is a consumability self-assessment, not a bug/feature request. Its
 own bottom line is "no action needed from iklo's side right now." The tasks
 below cover only the cheap, low-risk documentation/metadata fixes the
 assessment surfaced — they deliberately exclude the big rock (real kitty
-protocol encoding in `KittyBackend::present()`, a typed `Error` enum, a working
-end-to-end example), which is already `docs/spec.md`'s tracked v0 work and
-isn't newly scoped by this issue.
+protocol encoding in `KittyBackend::present()`, a richer typed `Error` enum
+(beyond the current single `Backend(String)` variant), a working end-to-end
+example), which is already `docs/spec.md`'s tracked v0 work and isn't newly
+scoped by this issue.
 
 ---
 
