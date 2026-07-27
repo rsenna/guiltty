@@ -24,15 +24,18 @@ This project is in the earliest stage of development. What exists today:
 
 - A three-crate Cargo workspace (`guiltty-core`, `guiltty-kitty`, `guiltty`) matching the
   architecture described in [`docs/spec.md`](docs/spec.md).
-- `guiltty-core`: the `Color` (RGBA8), `Point`, and `Rect` primitives, plus the backend-agnostic
-  `Backend` trait that rendering backends implement.
+- `guiltty-core`: the `Color` (RGBA8), `Point`, and `Rect` primitives; the backend-agnostic
+  `Backend` trait that rendering backends implement; and a `Canvas` supporting text, shape
+  drawing (lines, rectangles, circles, ellipses, triangles, and arbitrary paths), and movable
+  `Sprite`s over a preserved background — all implemented and unit-tested.
 - `guiltty-kitty`: a `KittyBackend` scaffold implementing `Backend` — no actual escape-sequence
   encoding or terminal transmission yet.
 - `guiltty`: a facade crate re-exporting the above.
 
-**None of the actual drawing functionality exists yet** — no `Canvas`, no shapes, no sprites,
-no viewport regions, no zoom/scroll, and no real kitty-protocol encoding. See
-[`docs/spec.md`](docs/spec.md)'s Success Criteria for what v0 will include once built, and
+**Terminal rendering doesn't exist yet** — `KittyBackend::present()` is still a stub, so there's
+no real kitty-protocol wire encoding, no independent viewport regions, no zoom, and no
+scroll/pan for canvases larger than the terminal. See [`docs/spec.md`](docs/spec.md)'s Success
+Criteria for what v0 will include once built, and
 [`docs/intent/kitty-graphics-ui-toolkit.md`](docs/intent/kitty-graphics-ui-toolkit.md) for the
 confirmed project intent this spec implements.
 
