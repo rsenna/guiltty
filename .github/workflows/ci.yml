@@ -21,8 +21,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # mise.toml pins rust to the same version declared as the workspace's MSRV
-      # (Cargo.toml's rust-version) -- this step is also this repo's MSRV verification.
+      # mise.toml pins Rust to the workspace's declared MSRV; subsequent checks
+      # compile and test the repository with that toolchain.
       - name: Install mise-managed tools (rust, cargo-llvm-cov)
         uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
 
