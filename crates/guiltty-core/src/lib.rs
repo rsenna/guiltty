@@ -87,9 +87,8 @@ pub trait Backend {
     /// with no need for that can simply use [`Error`].
     type Error: std::error::Error;
 
-    /// Presents the current frame to the terminal. Backends define their own
-    /// frame/state representation in later iterations of this trait.
-    fn present(&mut self) -> Result<(), Self::Error>;
+    /// Presents `canvas`'s current pixel buffer to the terminal.
+    fn present(&mut self, canvas: &Canvas) -> Result<(), Self::Error>;
 }
 
 /// Monotonically increasing counter handing out a fresh, unique id to every `Canvas`
@@ -175,6 +174,16 @@ impl Canvas {
         if let Some(i) = self.index(x, y) {
             self.pixels[i] = color;
         }
+    }
+
+    /// Flattens this canvas's pixel buffer into row-major RGBA8 bytes (4 bytes per pixel:
+    /// R, G, B, A in that order), the format backends transmit to a terminal.
+    pub fn rgba8_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.pixels.len() * 4);
+        for color in &self.pixels {
+            bytes.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+        }
+        bytes
     }
 
     /// Draws `text` starting at `origin` (top-left of the first glyph) using `style`.

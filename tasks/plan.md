@@ -29,7 +29,7 @@ demonstrates what's covered by T1–T3.
 
 ---
 
-- [ ] **T1 — Kitty protocol: encode and transmit a static image** 🔒
+- [x] **T1 — Kitty protocol: encode and transmit a static image** 🔒
 
 Acceptance:
 - The `Backend` trait (`crates/guiltty-core/src/lib.rs`) changes from
