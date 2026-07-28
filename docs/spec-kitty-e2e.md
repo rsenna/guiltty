@@ -93,24 +93,39 @@ docs, not assumption):
   before committing to a custom download script.
 - **Headless orchestration.** Xvfb (or an equivalent virtual framebuffer) +
   kitty configured for software rendering, launched with
-  `allow_remote_control=socket-only --listen-on unix:/path` so a test
-  harness can drive it via kitty's remote-control protocol
-  (`<ESC>P@kitty-cmd{...}<ESC>\`, or the `kitten @` CLI wrapper around it)
-  without needing interactive keyboard/mouse input.
+  `allow_remote_control=socket-only --listen-on unix:<unique-per-run-path>`
+  (a fresh path under a temp directory for every test invocation, e.g.
+  including the test's own process id) so a test harness can drive it via
+  kitty's remote-control protocol (`<ESC>P@kitty-cmd{...}<ESC>\`, or the
+  `kitten @` CLI wrapper around it) without needing interactive
+  keyboard/mouse input. The unique socket path matters: a fixed/well-known
+  path risks the harness attaching to an unrelated kitty instance already
+  running on the dev machine, or two concurrent test runs colliding with
+  each other (flagged independently by two reviewers on this PR's earlier
+  WezTerm-based draft — the same underlying risk applies here).
 - **Test harness.** A small, dedicated binary that: builds a `Canvas`
   exercising the feature under test, presents it using
   `Verbosity::ErrorsOnly` instead of `Silent`, reads kitty's response, and
-  writes a plain PASS/FAIL result directly to a file on the host
-  filesystem — not through kitty's own text-capture remote-control actions,
-  for the same reason noted in the original WezTerm research: APC responses
-  are program-visible (read by our own process from its stdin), not part of
-  on-screen "text" content a `get-text`-style action would capture.
+  writes a plain PASS/FAIL result directly to a **unique temporary file
+  path** (passed to the harness as an argument, not a fixed well-known
+  path — avoids race conditions between parallel test runs and false
+  positives from a stale result file left over from a previous run) — not
+  through kitty's own text-capture remote-control actions, since APC
+  responses are program-visible (read by our own process from its stdin),
+  not part of on-screen "text" content a `get-text`-style action would
+  capture.
 - **Orchestrating test.** A `#[test]`, `#[ignore]`'d by default (needs the
   kitty binary and Xvfb present, isn't part of the fast unit-test loop), that
-  starts Xvfb + kitty, spawns the harness, polls the result file, asserts
-  PASS, and tears both down. Run explicitly or from a dedicated CI job —
-  never folded into the existing fmt/clippy/test/90%-coverage gate, which
-  must stay fast and independent of external binaries/a virtual display.
+  starts Xvfb + kitty, spawns the harness, polls the result file against a
+  **hard deadline** (fails rather than hanging indefinitely if no response
+  ever arrives — kitty's response could in principle never come), and tears
+  everything down **unconditionally** — an RAII-style process guard (kill
+  Xvfb/kitty on `Drop`) rather than only tearing down on the test's success
+  path, so a panic or early-return doesn't leak the Xvfb/kitty processes,
+  the temp socket, or the temp result file. Run explicitly or from a
+  dedicated CI job — never folded into the existing
+  fmt/clippy/test/90%-coverage gate, which must stay fast and independent of
+  external binaries/a virtual display.
 
 ## Boundaries
 
