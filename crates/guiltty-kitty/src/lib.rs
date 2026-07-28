@@ -18,6 +18,16 @@ pub struct KittyBackend<W: Write = io::Stdout> {
     writer: W,
 }
 
+/// Manual, opaque `Debug` impl (rather than `#[derive(Debug)]`) so `KittyBackend<W>` stays
+/// `Debug` regardless of whether `W` itself implements `Debug` -- callers relying on
+/// `#[derive(Debug)]` elsewhere shouldn't be forced into a `W: Debug` bound just to log a
+/// struct that never exposes `W`'s contents anyway.
+impl<W: Write> std::fmt::Debug for KittyBackend<W> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KittyBackend").finish_non_exhaustive()
+    }
+}
+
 impl KittyBackend<io::Stdout> {
     /// Creates a backend that writes to stdout.
     pub fn new() -> Self {
@@ -50,17 +60,10 @@ impl<W: Write> Backend for KittyBackend<W> {
         let encoded = BASE64.encode(&rgba);
         let chunks: Vec<&[u8]> = encoded.as_bytes().chunks(MAX_CHUNK_LEN).collect();
 
+        // A zero-width/height canvas has no valid kitty raw-image representation
+        // (s=0,v=0 is not a well-formed image) -- there's nothing to present, so no-op.
         if chunks.is_empty() {
-            // Zero-size canvas: still transmit a single, empty-payload chunk so the
-            // terminal gets a well-formed (if trivial) image.
-            write!(
-                self.writer,
-                "\x1b_Ga=T,f=32,s={},v={},m=0;\x1b\\",
-                canvas.width(),
-                canvas.height()
-            )
-            .map_err(to_backend_err)?;
-            return self.writer.flush().map_err(to_backend_err);
+            return Ok(());
         }
 
         let last_index = chunks.len() - 1;
@@ -70,9 +73,15 @@ impl<W: Write> Backend for KittyBackend<W> {
             // valid ASCII/UTF-8.
             let chunk = std::str::from_utf8(chunk).expect("base64 output is valid UTF-8");
             if i == 0 {
+                // i=1: fixed image id -- repeated present() calls update/replace this
+                // same image instead of accumulating new anonymous ones.
+                // q=2: suppress the terminal's OK/error APC responses, so callers that
+                // read stdin afterward don't see them interleaved with real input.
+                // C=1: don't move the cursor after displaying, so repeated present()
+                // calls redraw at the same canvas origin instead of drifting down.
                 write!(
                     self.writer,
-                    "\x1b_Ga=T,f=32,s={},v={},m={};{}\x1b\\",
+                    "\x1b_Ga=T,f=32,i=1,q=2,C=1,s={},v={},m={};{}\x1b\\",
                     canvas.width(),
                     canvas.height(),
                     more,
@@ -103,7 +112,7 @@ mod tests {
         let canvas = Canvas::new(2, 1);
         let out = present_to_buf(&canvas);
 
-        assert!(out.starts_with("\x1b_Ga=T,f=32,s=2,v=1,m=0;"));
+        assert!(out.starts_with("\x1b_Ga=T,f=32,i=1,q=2,C=1,s=2,v=1,m=0;"));
         assert!(out.ends_with("\x1b\\"));
 
         let payload_start = out.find(';').unwrap() + 1;
@@ -157,9 +166,30 @@ mod tests {
     }
 
     #[test]
-    fn present_zero_size_canvas_writes_empty_chunk() {
+    fn present_zero_size_canvas_is_a_noop() {
         let canvas = Canvas::new(0, 0);
         let out = present_to_buf(&canvas);
-        assert_eq!(out, "\x1b_Ga=T,f=32,s=0,v=0,m=0;\x1b\\");
+        assert_eq!(
+            out, "",
+            "a zero-size canvas has no valid kitty image representation"
+        );
+    }
+
+    #[test]
+    fn present_reuses_the_same_image_id_across_calls() {
+        let canvas = Canvas::new(1, 1);
+        let mut buf = Vec::new();
+        let mut backend = KittyBackend::with_writer(&mut buf);
+        backend
+            .present(&canvas)
+            .expect("first present should succeed");
+        backend
+            .present(&canvas)
+            .expect("second present should succeed");
+        let out = String::from_utf8(buf).expect("output should be valid UTF-8");
+
+        // Both frames use the same fixed image id (i=1) so the terminal replaces the
+        // prior frame instead of accumulating a new anonymous image each call.
+        assert_eq!(out.matches("i=1,").count(), 2);
     }
 }
