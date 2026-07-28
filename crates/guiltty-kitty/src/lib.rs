@@ -21,6 +21,19 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// would let one backend's `present()` replace or delete another's image/placement).
 static NEXT_IMAGE_ID: AtomicU32 = AtomicU32::new(1);
 
+/// Allocates the next image id, skipping zero if the counter ever wraps around (after
+/// `u32::MAX` instances) -- `NonZeroU32` is required by kittage's `NumberOrId::Id`, and
+/// silently panicking on a wrapped-to-zero id would be a real (if exceedingly unlikely)
+/// crash in long-lived processes creating many backends.
+fn next_image_id() -> NonZeroU32 {
+    loop {
+        let id = NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed);
+        if let Some(id) = NonZeroU32::new(id) {
+            return id;
+        }
+    }
+}
+
 /// The kitty graphics protocol backend. Encodes a [`Canvas`]'s pixel buffer as a kitty
 /// graphics protocol APC escape sequence (RGBA8, base64-encoded, chunked per the
 /// protocol's 4096-byte-per-chunk limit) and writes it to `W`. Defaults to writing to
@@ -32,7 +45,7 @@ static NEXT_IMAGE_ID: AtomicU32 = AtomicU32::new(1);
 /// on-screen placement instead of accumulating new anonymous images.
 pub struct KittyBackend<W: Write = io::Stdout> {
     writer: W,
-    image_id: u32,
+    image_id: NonZeroU32,
 }
 
 /// Manual, opaque `Debug` impl (rather than `#[derive(Debug)]`) so `KittyBackend<W>` stays
@@ -50,7 +63,7 @@ impl KittyBackend<io::Stdout> {
     pub fn new() -> Self {
         Self {
             writer: io::stdout(),
-            image_id: NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed),
+            image_id: next_image_id(),
         }
     }
 }
@@ -66,7 +79,7 @@ impl<W: Write> KittyBackend<W> {
     pub fn with_writer(writer: W) -> Self {
         Self {
             writer,
-            image_id: NEXT_IMAGE_ID.fetch_add(1, Ordering::Relaxed),
+            image_id: next_image_id(),
         }
     }
 }
@@ -97,7 +110,7 @@ impl<W: Write> Backend for KittyBackend<W> {
             height: h,
         };
 
-        let id = NonZeroU32::new(self.image_id).expect("image_id is never zero");
+        let id = self.image_id;
 
         let image = Image {
             num_or_id: NumberOrId::Id(id),
@@ -129,12 +142,14 @@ impl<W: Write> Backend for KittyBackend<W> {
             placement_id: Some(id),
         };
 
+        // write_transmit_to already flushes the writer internally (verified
+        // empirically -- a custom Write wrapper counting flush() calls showed 2 calls
+        // when we also called flush() ourselves here, vs. 1 without it), so no separate
+        // flush call is needed.
         action
             .write_transmit_to(&mut self.writer, Verbosity::Silent)
             .map_err(to_backend_err)?;
-        self.writer
-            .flush()
-            .map_err(|e| Error::Backend(e.to_string()))
+        Ok(())
     }
 }
 
@@ -151,8 +166,9 @@ mod tests {
         let mut backend = KittyBackend::with_writer(&mut buf);
         backend.present(canvas).expect("present should succeed");
         let out = String::from_utf8(buf).expect("output should be valid UTF-8");
-        // Known kittage 0.4.0 quirk (confirmed via byte-level inspection, reported
-        // upstream): write_transmit_to writes the ESC-backslash string terminator
+        // Known kittage 0.4.0 quirk (confirmed via byte-level inspection; a draft
+        // issue report was prepared for the user to file upstream, not yet submitted):
+        // write_transmit_to writes the ESC-backslash string terminator
         // TWICE at the very end of the final (m=0) chunk -- single-chunk output and
         // the last chunk of multi-chunk output alike. Believed harmless in practice
         // (an extra empty escape sequence with nothing preceding it), but
