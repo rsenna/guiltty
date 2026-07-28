@@ -91,22 +91,37 @@ docs, not assumption):
   terminal, same gap as WezTerm had. Checked `mise`'s plugin registry
   previously for WezTerm and found no entry; same check needed for kitty
   before committing to a custom download script.
+- **Two distinct channels, not one** — a gap in an earlier draft of this
+  spec that review caught: kitty's remote-control socket
+  (`--listen-on unix:<path>`) carries *kitty control commands only*
+  (spawning/managing windows, querying state) — it is **not** how graphics
+  protocol bytes reach kitty or how kitty's graphics responses get read
+  back. Those travel over the PTY of whichever window is actually running
+  the harness process, i.e. the harness's own stdout/stdin once kitty has
+  spawned it. Concretely: the control socket is used only to issue a
+  `launch` remote-control action that spawns a new kitty window running the
+  harness binary; the harness then talks graphics protocol directly over
+  its own stdout (which is that window's PTY) and reads kitty's response
+  from its own stdin — no different from how the harness would work
+  outside any orchestration at all.
 - **Headless orchestration.** Xvfb (or an equivalent virtual framebuffer) +
   kitty configured for software rendering, launched with
   `allow_remote_control=socket-only --listen-on unix:<unique-per-run-path>`
   (a fresh path under a temp directory for every test invocation, e.g.
-  including the test's own process id) so a test harness can drive it via
-  kitty's remote-control protocol (`<ESC>P@kitty-cmd{...}<ESC>\`, or the
-  `kitten @` CLI wrapper around it) without needing interactive
-  keyboard/mouse input. The unique socket path matters: a fixed/well-known
-  path risks the harness attaching to an unrelated kitty instance already
-  running on the dev machine, or two concurrent test runs colliding with
-  each other (flagged independently by two reviewers on this PR's earlier
-  WezTerm-based draft — the same underlying risk applies here).
-- **Test harness.** A small, dedicated binary that: builds a `Canvas`
-  exercising the feature under test, presents it using
-  `Verbosity::ErrorsOnly` instead of `Silent`, reads kitty's response, and
-  writes a plain PASS/FAIL result directly to a **unique temporary file
+  including the test's own process id) so an orchestrating process can issue
+  the `launch` action (see above) to spawn the harness inside a real kitty
+  window, without needing interactive keyboard/mouse input. The unique
+  socket path matters: a fixed/well-known path risks the harness attaching
+  to an unrelated kitty instance already running on the dev machine, or two
+  concurrent test runs colliding with each other (flagged independently by
+  two reviewers on this PR's earlier WezTerm-based draft — the same
+  underlying risk applies here).
+- **Test harness.** A small, dedicated binary, spawned inside a real kitty
+  window via the `launch` remote-control action above (not connected to the
+  remote-control socket itself), that: builds a `Canvas` exercising the
+  feature under test, presents it using `Verbosity::ErrorsOnly` instead of
+  `Silent`, reads kitty's response from its own stdin (its window's PTY),
+  and writes a plain PASS/FAIL result directly to a **unique temporary file
   path** (passed to the harness as an argument, not a fixed well-known
   path — avoids race conditions between parallel test runs and false
   positives from a stale result file left over from a previous run) — not
@@ -150,6 +165,9 @@ docs, not assumption):
 2. A headless (Xvfb-backed) kitty instance that a test harness can drive via
    remote control, presenting a guiltty `Canvas` and capturing whether the
    kitty graphics protocol commands were accepted (OK) or rejected (error).
+   **Linux only**: Xvfb is X11-specific and has no macOS equivalent (macOS
+   uses Quartz, not X11) — this automated tier does not cover macOS. macOS
+   verification stays manual (Success Criterion 4), same as BSD.
 3. At least one `#[ignore]`'d automated test exercising this against T1/T4's
    existing `present()` path, runnable on demand, separate from the default
    `cargo test --workspace` gate.
@@ -167,10 +185,12 @@ docs, not assumption):
   to it as a Success Criterion rather than a stretch goal.
 - Exact provisioning mechanism: whether `mise`'s registry has (or gains) a
   kitty entry, vs. a custom pinned-download script.
-- CI platform coverage: GitHub Actions runners are Linux/macOS/Windows, so
-  the automated tier-1 suite is Linux/macOS only in CI even though guiltty
-  itself targets BSDs too; BSD verification stays a manual, local-only
-  procedure (same as the original WezTerm-based plan).
+- CI platform coverage: the automated Xvfb-backed tier-1 suite is **Linux
+  only** (Xvfb is X11-specific, no macOS equivalent — GitHub Actions macOS
+  runners can't use it), even though guiltty itself targets macOS and BSDs
+  too. Whether a macOS-native headless/capture path exists (some other
+  virtual-display or screen-capture mechanism) is unexplored — for now,
+  macOS and BSD verification both stay manual, local-only procedures.
 - Whether the harness should use kittage's synchronous `Action::execute`
   (blocks on reading the terminal's response) or a different read strategy —
   needs prototyping once implementation starts.
