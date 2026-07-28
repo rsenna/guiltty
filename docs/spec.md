@@ -53,7 +53,7 @@ tasks/                  → plan.md and todo.md (populated in the Plan/Tasks pha
 
 Standard Rust idioms: `snake_case` for functions/variables, `CamelCase` for types, `rustfmt` defaults, `clippy` clean with no warnings suppressed without a documented reason. Public API returns `Result<T, guiltty_core::Error>` rather than panicking; panics are reserved for programmer-error invariants (e.g., an out-of-bounds internal index), never for recoverable conditions like a failed terminal write.
 
-Illustrative target shape for the core API (not yet implemented), following ratatui's `Terminal`/`Frame`/`draw()` immediate-mode pattern:
+Illustrative target shape for the core API (not yet implemented), following ratatui's `Terminal`/`Frame`/`draw()` immediate-mode pattern. The `event::read()`/`Event::Key` calls below are illustrative of an application-level input loop (e.g. via `crossterm` or similar) driving *when* to redraw — guiltty itself does not provide mouse/keyboard event handling in v0, per the Boundaries section below.
 
 ```rust
 let mut terminal = guiltty::init()?; // Terminal<KittyBackend>
@@ -91,7 +91,7 @@ loop {
 
 - **Always:** run `cargo fmt`, `cargo clippy`, and `cargo test --workspace` before considering a task done; keep `guiltty-core` free of any kitty-specific (or any backend-specific) code — backend concerns live only in backend crates; document public API items with doc comments.
 - **Ask first:** adding any new external dependency (especially anything requiring C/FFI); adding a new backend crate; changing the workspace crate boundaries defined above; changing the license.
-- **Never:** let backend-specific code leak into `guiltty-core`; introduce panics on recoverable error paths in public API; commit secrets; remove a failing test without explicit approval.
+- **Never:** let backend-specific code leak into `guiltty-core`; introduce panics on recoverable error paths in public API; commit secrets; remove a failing test without explicit approval; build mouse/event handling, interactive widgets (buttons, clickable elements), or a scriptable CLI binary interface — all explicitly out of scope for v0 per [docs/intent/kitty-graphics-ui-toolkit.md](intent/kitty-graphics-ui-toolkit.md).
 
 ## Success Criteria
 
