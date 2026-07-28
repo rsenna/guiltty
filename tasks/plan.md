@@ -144,7 +144,7 @@ this landing first so sprites can use a real image instead of `Bitmap::solid`.
 
 ---
 
-- [ ] **T4 — Runnable example demonstrating T1–T3**
+- [x] **T4 — Runnable example demonstrating T1–T3** -- code implemented; manual real-terminal visual verification still pending (same caveat as T1 -- no kitty-compatible terminal available in this environment)
 
 Acceptance:
 - `examples/src/bin/placeholder.rs` is replaced (or a new example binary is
