@@ -108,7 +108,7 @@ Dependencies: none — independent of T1, doesn't touch the kitty crate.
 
 ---
 
-- [ ] **T3 — `Bitmap::from_file` image loading** 🔒
+- [x] **T3 — `Bitmap::from_file` image loading** 🔒
 
 Acceptance:
 - `Bitmap` gains a constructor that loads pixel data from an image file
