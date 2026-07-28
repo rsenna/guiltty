@@ -79,7 +79,7 @@ Dependencies: none.
 
 ---
 
-- [ ] **T2 — `Shape::Path` polygon fill**
+- [x] **T2 — `Shape::Path` polygon fill**
 
 Acceptance:
 - `Canvas::draw_shape` fills closed `Shape::Path` variants with `Fill::Solid`

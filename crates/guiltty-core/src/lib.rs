@@ -350,8 +350,9 @@ impl Fill {
     }
 }
 
-/// A drawable shape. Rects/circles/ellipses/triangles are filled solid; `Line` and
-/// `Path` have no interior to fill, so their `Fill`'s color is used as the stroke color.
+/// A drawable shape. Rects/circles/ellipses/triangles/closed paths are filled solid;
+/// `Line` and open `Path`s have no interior to fill, so their `Fill`'s color is used as
+/// the stroke color instead.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape {
     Line {
@@ -377,10 +378,15 @@ pub enum Shape {
         b: Point,
         c: Point,
     },
-    /// An arbitrary open or closed path connecting `points` in order. v0 draws this as
-    /// connected line segments (stroke only) — polygon fill for arbitrary paths is left
-    /// for a follow-up task; `closed` only controls whether the last point connects back
-    /// to the first.
+    /// An arbitrary open or closed path connecting `points` in order. An **open** path
+    /// (`closed: false`) is drawn as connected line segments (stroke only). A **closed**
+    /// path (`closed: true`) is filled solid instead, using a scanline polygon fill with
+    /// the **even-odd rule** (simpler than nonzero-winding, standard for a scanline fill,
+    /// and sufficient since v0 doesn't need winding-direction semantics) — this also
+    /// correctly handles concave and self-intersecting closed paths, not just convex
+    /// ones. `closed` no longer means "also stroke the closing edge": it selects fill
+    /// instead of stroke entirely, consistent with how `Rect`/`Circle`/`Ellipse`/
+    /// `Triangle` are filled solid with no separate outline stroke.
     Path {
         points: Vec<Point>,
         closed: bool,
@@ -432,7 +438,13 @@ impl Canvas {
             Shape::Circle { center, radius } => self.fill_ellipse(*center, *radius, *radius, color),
             Shape::Ellipse { center, rx, ry } => self.fill_ellipse(*center, *rx, *ry, color),
             Shape::Triangle { a, b, c } => self.fill_triangle(*a, *b, *c, color),
-            Shape::Path { points, closed } => self.stroke_path(points, *closed, color),
+            Shape::Path { points, closed } => {
+                if *closed {
+                    self.fill_polygon_even_odd(points, color);
+                } else {
+                    self.stroke_path(points, color);
+                }
+            }
         }
     }
 
@@ -478,14 +490,11 @@ impl Canvas {
         }
     }
 
-    fn stroke_path(&mut self, points: &[Point], closed: bool, color: Color) {
+    /// Strokes an open path as connected line segments. Closed paths are filled instead
+    /// (see [`Shape::Path`]), so this never needs to draw a closing segment.
+    fn stroke_path(&mut self, points: &[Point], color: Color) {
         for pair in points.windows(2) {
             self.stroke_line(pair[0], pair[1], color);
-        }
-        if closed {
-            if let (Some(&first), Some(&last)) = (points.first(), points.last()) {
-                self.stroke_line(last, first, color);
-            }
         }
     }
 
@@ -563,6 +572,59 @@ impl Canvas {
         for y in min_y..=max_y {
             for x in min_x..=max_x {
                 if point_in_triangle(x, y, a, b, c) {
+                    self.set_pixel(x as u32, y as u32, color);
+                }
+            }
+        }
+    }
+
+    /// Fills a closed polygon (`points`, implicitly closed back to the first point) using
+    /// a scanline fill with the **even-odd rule**: for each scanline, find every edge
+    /// crossing, sort the crossing x-coordinates, and fill between each successive pair.
+    /// This correctly handles concave polygons and self-intersecting ones too (each
+    /// crossing still flips inside/outside, regardless of winding direction) -- unlike
+    /// `fill_triangle`'s barycentric test, which only applies to (non-self-intersecting)
+    /// triangles.
+    ///
+    /// Scans at `y + 0.5` (not integer `y`) so a polygon vertex never sits exactly on a
+    /// scanline -- that would otherwise make the standard `(y1 <= yf) != (y2 <= yf)`
+    /// crossing test count a shared vertex between two edges inconsistently.
+    fn fill_polygon_even_odd(&mut self, points: &[Point], color: Color) {
+        let n = points.len();
+        if n < 3 {
+            return; // Fewer than 3 points has no interior to fill.
+        }
+
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let min_y = points.iter().map(|p| p.y as i64).min().unwrap().max(0);
+        let max_y = points
+            .iter()
+            .map(|p| p.y as i64)
+            .max()
+            .unwrap()
+            .min(canvas_h - 1);
+
+        for y in min_y..=max_y {
+            let yf = y as f64 + 0.5;
+            let mut crossings: Vec<f64> = Vec::new();
+            for i in 0..n {
+                let p1 = points[i];
+                let p2 = points[(i + 1) % n];
+                let (y1, y2) = (p1.y as f64, p2.y as f64);
+                if (y1 <= yf) != (y2 <= yf) {
+                    let x1 = p1.x as f64;
+                    let x2 = p2.x as f64;
+                    let t = (yf - y1) / (y2 - y1);
+                    crossings.push(x1 + t * (x2 - x1));
+                }
+            }
+            crossings.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+            for pair in crossings.chunks_exact(2) {
+                let x_lo = (pair[0].ceil() as i64).max(0);
+                let x_hi = (pair[1].floor() as i64 + 1).min(canvas_w);
+                for x in x_lo..x_hi {
                     self.set_pixel(x as u32, y as u32, color);
                 }
             }
@@ -1074,18 +1136,79 @@ mod tests {
     }
 
     #[test]
-    fn draw_shape_path_closed_connects_last_to_first() {
-        let mut c = Canvas::new(4, 4);
+    fn draw_shape_path_closed_convex_fills_interior_not_exterior() {
+        // A 6x6 square, convex.
+        let mut c = Canvas::new(8, 8);
         let color = Color::rgb(3, 3, 3);
         c.draw_shape(
             &Shape::path(
-                vec![Point::new(0, 0), Point::new(3, 0), Point::new(3, 3)],
+                vec![
+                    Point::new(1, 1),
+                    Point::new(6, 1),
+                    Point::new(6, 6),
+                    Point::new(1, 6),
+                ],
                 true,
             ),
             Fill::solid(color),
         );
-        // closed path adds a segment from (3,3) back to (0,0), passing through (1,1)/(2,2)
-        assert_eq!(c.pixel(1, 1), Some(color));
+        assert_eq!(c.pixel(3, 3), Some(color)); // well inside the square
+        assert_eq!(c.pixel(0, 0), Some(Color::default())); // outside
+        assert_eq!(c.pixel(7, 7), Some(Color::default())); // outside
+    }
+
+    #[test]
+    fn draw_shape_path_closed_concave_fills_interior_not_the_notch() {
+        // An "L"/notch shape: concave at (3,3), a triangular notch cut into the
+        // top-left corner. `closed` connects the last point (3,3) back to the first
+        // (1,1) automatically -- no need to repeat (1,1) at the end of `points`.
+        let mut c = Canvas::new(8, 8);
+        let color = Color::rgb(4, 4, 4);
+        c.draw_shape(
+            &Shape::path(
+                vec![
+                    Point::new(1, 1),
+                    Point::new(6, 1),
+                    Point::new(6, 6),
+                    Point::new(1, 6),
+                    Point::new(1, 3),
+                    Point::new(3, 3), // concave vertex, notch apex
+                ],
+                true,
+            ),
+            Fill::solid(color),
+        );
+        assert_eq!(c.pixel(4, 4), Some(color)); // inside the main body
+        assert_eq!(c.pixel(0, 0), Some(Color::default())); // outside entirely
+                                                           // Inside the carved-out notch near its corner: still outside the polygon.
+        assert_eq!(c.pixel(1, 2), Some(Color::default()));
+    }
+
+    #[test]
+    fn draw_shape_path_closed_self_intersecting_uses_even_odd_rule() {
+        // A "bowtie": edges (1,1)-(6,6) and (6,1)-(1,6) cross near the shape's center,
+        // forming a self-intersecting quadrilateral (two triangular lobes pinched at the
+        // crossing point). Even-odd rule fills each lobe, with the two lobes merging
+        // into one solid span only on the scanline through the pinch point.
+        let mut c = Canvas::new(8, 8);
+        let color = Color::rgb(5, 5, 5);
+        c.draw_shape(
+            &Shape::path(
+                vec![
+                    Point::new(1, 1),
+                    Point::new(6, 6),
+                    Point::new(6, 1),
+                    Point::new(1, 6),
+                ],
+                true,
+            ),
+            Fill::solid(color),
+        );
+        assert_eq!(c.pixel(3, 3), Some(color)); // the pinch row: filled edge-to-edge
+        assert_eq!(c.pixel(2, 2), Some(color)); // left lobe
+        assert_eq!(c.pixel(5, 2), Some(color)); // right lobe
+        assert_eq!(c.pixel(3, 1), Some(Color::default())); // gap between the two lobes
+        assert_eq!(c.pixel(0, 0), Some(Color::default())); // outside entirely
     }
 
     #[test]
