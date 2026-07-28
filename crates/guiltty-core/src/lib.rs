@@ -66,12 +66,16 @@ impl Rect {
 pub enum Error {
     /// Placeholder variant until backend implementations define real error cases.
     Backend(String),
+    /// Failed to load an image file (missing file, unsupported/malformed format, etc.)
+    /// via [`Bitmap::from_file`].
+    ImageLoad(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Backend(msg) => write!(f, "backend error: {msg}"),
+            Error::ImageLoad(msg) => write!(f, "image load error: {msg}"),
         }
     }
 }
@@ -651,8 +655,9 @@ impl Canvas {
 }
 
 /// A small RGBA8 image used as sprite content. Structurally similar to `Canvas`'s pixel
-/// buffer, but represents drawable material rather than a render target. v0 only
-/// supports building bitmaps in-memory — there's no file/PNG loading yet.
+/// buffer, but represents drawable material rather than a render target. Can be built
+/// in-memory ([`Bitmap::new`]/[`Bitmap::solid`]) or loaded from a file on disk
+/// ([`Bitmap::from_file`]).
 #[derive(Debug, Clone)]
 pub struct Bitmap {
     width: u32,
@@ -691,6 +696,31 @@ impl Bitmap {
             height,
             pixels: vec![color; len],
         }
+    }
+
+    /// Loads an image file (PNG, JPEG, GIF, or BMP) from `path` and converts it to a
+    /// bitmap. Every source pixel format (RGB, grayscale, indexed palette, etc.) is
+    /// converted to this crate's RGBA8 color model: sources without an alpha channel get
+    /// a fully-opaque (255) default alpha.
+    ///
+    /// Returns `Err(Error::ImageLoad(_))` rather than panicking for a missing file, an
+    /// unsupported format, or malformed/corrupt image data -- per this crate's
+    /// recoverable-error convention (see the crate-level Code Style notes), a bad file on
+    /// disk is exactly the kind of caller-facing condition that shouldn't panic.
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Error> {
+        let img = image::open(path.as_ref())
+            .map_err(|e| Error::ImageLoad(format!("{}: {e}", path.as_ref().display())))?;
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let pixels = rgba
+            .pixels()
+            .map(|p| Color::rgba(p[0], p[1], p[2], p[3]))
+            .collect();
+        Ok(Self {
+            width,
+            height,
+            pixels,
+        })
     }
 
     /// `width * height` as a `usize`, converting each dimension with a checked cast first
@@ -1353,6 +1383,50 @@ mod tests {
                 assert_eq!(b.pixel(x, y), Some(Color::rgb(9, 9, 9)));
             }
         }
+    }
+
+    #[test]
+    fn bitmap_from_file_loads_rgba_png() {
+        let b = Bitmap::from_file("tests/fixtures/rgba_2x2.png").expect("fixture should load");
+        assert_eq!((b.width(), b.height()), (2, 2));
+        assert_eq!(b.pixel(0, 0), Some(Color::rgba(255, 0, 0, 255)));
+        assert_eq!(b.pixel(1, 0), Some(Color::rgba(0, 255, 0, 128)));
+        assert_eq!(b.pixel(0, 1), Some(Color::rgba(0, 0, 255, 255)));
+        assert_eq!(b.pixel(1, 1), Some(Color::rgba(255, 255, 0, 0)));
+    }
+
+    #[test]
+    fn bitmap_from_file_converts_rgb_to_rgba8_with_opaque_default_alpha() {
+        let b = Bitmap::from_file("tests/fixtures/rgb_2x2.png").expect("fixture should load");
+        assert_eq!((b.width(), b.height()), (2, 2));
+        // Source has no alpha channel -- every pixel must come out fully opaque (255).
+        assert_eq!(b.pixel(0, 0), Some(Color::rgba(10, 20, 30, 255)));
+        assert_eq!(b.pixel(1, 0), Some(Color::rgba(40, 50, 60, 255)));
+        assert_eq!(b.pixel(0, 1), Some(Color::rgba(70, 80, 90, 255)));
+        assert_eq!(b.pixel(1, 1), Some(Color::rgba(100, 110, 120, 255)));
+    }
+
+    #[test]
+    fn bitmap_from_file_converts_grayscale_to_rgba8() {
+        let b = Bitmap::from_file("tests/fixtures/grayscale_2x2.png").expect("fixture should load");
+        assert_eq!((b.width(), b.height()), (2, 2));
+        // Grayscale -> RGB replicates the luminance value across r/g/b, opaque alpha.
+        assert_eq!(b.pixel(0, 0), Some(Color::rgba(0, 0, 0, 255)));
+        assert_eq!(b.pixel(1, 0), Some(Color::rgba(85, 85, 85, 255)));
+        assert_eq!(b.pixel(0, 1), Some(Color::rgba(170, 170, 170, 255)));
+        assert_eq!(b.pixel(1, 1), Some(Color::rgba(255, 255, 255, 255)));
+    }
+
+    #[test]
+    fn bitmap_from_file_missing_file_returns_err_not_panic() {
+        let result = Bitmap::from_file("tests/fixtures/does_not_exist.png");
+        assert!(matches!(result, Err(Error::ImageLoad(_))));
+    }
+
+    #[test]
+    fn bitmap_from_file_malformed_image_returns_err_not_panic() {
+        let result = Bitmap::from_file("tests/fixtures/malformed.png");
+        assert!(matches!(result, Err(Error::ImageLoad(_))));
     }
 
     #[test]
