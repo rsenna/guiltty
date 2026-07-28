@@ -1,4 +1,4 @@
-# Spec: WezTerm-based E2E verification
+# Spec: kitty-based E2E verification
 
 ## Objective
 
@@ -7,18 +7,19 @@ runnable example) has shipped with the same unresolved caveat: *manual
 real-terminal visual verification is still pending — no kitty-compatible
 terminal available in this environment.* Nothing built so far has ever been
 confirmed to work against a real terminal. This spec closes part of that gap:
-automated, headless, CI-capable verification that a real kitty-protocol
-terminal implementation *accepts* guiltty's escape sequences, using
-[WezTerm](https://wezterm.org/) as a black-box test oracle.
+automated verification against a real terminal, using
+[kitty](https://sw.kovidgoyal.net/kitty/) itself — the protocol's reference
+implementation — as a black-box test oracle.
 
-**Why WezTerm specifically:** it's cross-platform (Linux, macOS, and — via the
-platform's own package manager rather than an official prebuilt binary —
-BSDs), implements the kitty graphics protocol, is actively maintained, and,
-critically, its multiplexer (mux) layer can run **fully headless**: WezTerm's
-own docs confirm `wezterm.gui` (the rendering/windowing module) is
-unavailable to the mux server, meaning `wezterm-mux-server` is a pure
-PTY/pane/state multiplexer with no GPU or display-server dependency. That
-makes it viable for CI, not just local dev-machine testing.
+**Why kitty specifically, not a reimplementation:** this spec originally
+targeted WezTerm, a third-party reimplementation of the kitty graphics
+protocol. WezTerm has a documented history of protocol-compatibility gaps
+with kitty's own implementation — exactly the kind of divergence that could
+mask or fabricate bugs in either direction (WezTerm rendering something kitty
+wouldn't, or rejecting something kitty accepts). Since kitty is the reference
+implementation, testing directly against it removes that ambiguity for the
+questions that matter most: does *the terminal this protocol was designed
+for* accept and correctly handle what we send.
 
 **Why now:** T1 and T4 are both implemented and gate-green, but the "does a
 real terminal even accept this?" question has been open since T1's first PR.
@@ -27,113 +28,136 @@ protocol bugs (missing `q=`/`C=`/`i=` keys, a kittage double-terminator bug,
 an image-id collision) purely from static analysis — a real terminal in the
 loop would catch classes of bug static review can't.
 
+## Researched and ruled out
+
+Before settling on this approach, two other mechanisms were investigated and
+rejected based on kitty's actual documented capabilities (via kitty's own
+docs, not assumption):
+
+- **Reverse transmission** (asking the terminal to hand back the pixel data
+  it has stored/rendered for a given image, to compare against what was
+  sent): not supported. The kitty graphics protocol's full action set is
+  `t`/`T` (transmit / transmit-and-display), `p` (place), `d` (delete), `q`
+  (query), `c` (compose animation frame) — every one of these is
+  client→terminal only. `a=q` returns only an `OK`/error status, never pixel
+  data. There is no protocol-level path to read image data back out.
+- **Clipboard-based capture** (kitty's `kitten clipboard` / OSC 5522
+  extension does support copying images to/from the system clipboard): real
+  feature, but it's general-purpose clipboard I/O — push a local file to the
+  clipboard, or read whatever the *system* clipboard currently holds to a
+  file. No evidence of a feature that captures "what the graphics protocol
+  currently has displayed on screen" onto the clipboard. Using it to push our
+  own known-good source bytes to the clipboard wouldn't verify anything about
+  whether the actual graphics-protocol transmission rendered correctly — it
+  would only prove the unrelated OSC 5522 clipboard write path works.
+
 ## Scope: two verification tiers
 
-1. **Protocol-acceptance testing (in scope for this spec).** Prove that a
-   real kitty-protocol terminal implementation parses guiltty's escape
-   sequences without an error response. This is concretely achievable
-   headlessly: kittage's `Verbosity::ErrorsOnly` (or `All`) instead of
-   `Silent` makes the terminal respond, and kittage's `Action::execute`
-   (rather than `write_transmit_to`) already reads and parses that response
-   via its `InputReader` trait. This tier does **not** confirm the image
-   *looks* correct pixel-for-pixel — only that the terminal accepted it.
-2. **Pixel-level visual verification (explicitly out of scope / open
-   question).** Actually confirming rendered output looks correct would need
-   either a GUI-attached WezTerm client plus OS-level screenshot tooling, or
-   a WezTerm capability this spec's research didn't find evidence of (no
-   `screenshot`/pixel-capture CLI command turned up in WezTerm's documented
-   CLI surface). Manual visual verification remains the process for this
-   tier in v0; automating it is an open question below, not a blocker for
-   tier 1.
-
-Tier 1 alone is a meaningful upgrade: it moves "does this work at all against
-a real terminal" from *manual, unverified, environment-dependent* to
-*automated and checked on every run where the harness is available*.
+1. **Protocol-acceptance testing (in scope for this spec).** Prove that
+   kitty itself parses guiltty's escape sequences without an error response.
+   kittage's `Verbosity::ErrorsOnly` (or `All`) instead of `Silent` makes the
+   terminal respond, and kittage's `Action::execute` (rather than
+   `write_transmit_to`) already reads and parses that response via its
+   `InputReader` trait.
+2. **Pixel-level visual verification (elevated from "open question" to
+   "plausible," pending prototyping).** Unlike WezTerm's genuinely
+   GPU/display-free mux server, kitty has no equivalent headless daemon: it's
+   a single GPU-rendering process, and `--start-as=hidden` only hides the
+   window — it doesn't remove the need for a display server. Running kitty
+   headlessly for CI means running it under a **virtual** display (Xvfb) with
+   software GPU rendering (e.g. via Mesa's llvmpipe). The upside: a real
+   (virtual) X11 framebuffer is a real thing standard screenshot tools
+   (`xwd`, `import`, `scrot`, `ffmpeg` capturing the X display) can capture —
+   something WezTerm's deliberately renderer-free mux server never offered.
+   This tier needs prototyping to derisk (confirm software rendering is
+   stable enough to trust for pixel comparison, confirm screenshot timing
+   relative to when kitty finishes rendering a frame) before being promoted
+   to a Success Criterion.
 
 ## Tech Stack / Approach
 
-- **Binary-only, black-box dependency.** WezTerm is a **dev-dependency only**
+- **Binary-only, black-box dependency.** kitty is a **dev-dependency only**
   — never a build or runtime dependency of `guiltty`/`guiltty-core`/
-  `guiltty-kitty`. No `Cargo.toml` entry for any WezTerm Rust crate, ever;
-  guiltty's own dependency graph is entirely unaffected by this spec. WezTerm
+  `guiltty-kitty`. No `Cargo.toml` entry for any kitty-related Rust crate;
+  guiltty's own dependency graph is entirely unaffected by this spec. kitty
   is consumed exclusively as a prebuilt binary, invoked as an external
-  subprocess (`std::process::Command`), the same way `cargo-llvm-cov` or any
-  other dev tool is used.
-- **Provisioning.** Checked `mise`'s plugin registry — it has no WezTerm
-  entry — so binary provisioning needs its own mechanism rather than
-  `mise.toml`. Official prebuilt release binaries exist for Linux (per-distro
-  `.deb`/`.tar.xz`/a distro-agnostic `.AppImage`) and macOS (`.zip`, a signed
-  `.app` bundle) from WezTerm's GitHub Releases, checksummed (`.sha256` files
-  ship alongside every asset). For BSDs, no official prebuilt binary is
-  published — the platform's own package manager (e.g. FreeBSD's `pkg install
-  wezterm`) is the "binary-only" path there instead of GitHub Releases.
-- **Headless orchestration.** `wezterm-mux-server` started as a background
-  process (see `daemon_options` for pid-file/log-file locations); `wezterm
-  cli spawn` runs a test harness binary inside a real pane it manages —
-  confirmed to require no GUI or display server for this operation.
-- **Test harness.** A small, dedicated binary (not the T4 demo itself, though
-  it can reuse the same `Canvas`-building code) that: builds a `Canvas`
-  exercising the feature under test, presents it using `Verbosity::ErrorsOnly`
-  instead of `Silent`, reads the terminal's response, and writes a plain
-  PASS/FAIL result **directly to a file on the host filesystem** — not
-  through WezTerm's own `wezterm cli get-text`, since APC responses are
-  program-visible (read by our own process from its stdin), not part of
-  what's displayed on-screen; `get-text` captures screen/cell content, which
-  doesn't include this out-of-band protocol response at all.
-- **Orchestrating test.** A `#[test]`, `#[ignore]`'d by default (since it
-  needs the WezTerm binary present and isn't part of the fast unit-test
-  loop), that starts the mux server, spawns the harness, polls the result
-  file, asserts PASS, and tears the mux server down. Run explicitly (e.g.
-  `cargo test --workspace -- --ignored`) or from a dedicated CI job — never
-  folded into the existing fmt/clippy/test/90%-coverage gate, since that gate
-  must stay fast and independent of an external binary's availability.
+  subprocess, the same way `cargo-llvm-cov` or any other dev tool is used.
+- **Provisioning.** kitty publishes official signed prebuilt binaries: the
+  full terminal for Linux (x86_64/arm64, `.txz`) and macOS (`.dmg`); for
+  BSDs, only the companion `kitten` CLI tool is officially published
+  (FreeBSD/DragonFly/NetBSD/OpenBSD, amd64/arm64) — **not** the full terminal
+  binary, so BSD would need the platform's own package manager (e.g.
+  FreeBSD's `pkg install kitty` / ports `x11/kitty`) for the actual
+  terminal, same gap as WezTerm had. Checked `mise`'s plugin registry
+  previously for WezTerm and found no entry; same check needed for kitty
+  before committing to a custom download script.
+- **Headless orchestration.** Xvfb (or an equivalent virtual framebuffer) +
+  kitty configured for software rendering, launched with
+  `allow_remote_control=socket-only --listen-on unix:/path` so a test
+  harness can drive it via kitty's remote-control protocol
+  (`<ESC>P@kitty-cmd{...}<ESC>\`, or the `kitten @` CLI wrapper around it)
+  without needing interactive keyboard/mouse input.
+- **Test harness.** A small, dedicated binary that: builds a `Canvas`
+  exercising the feature under test, presents it using
+  `Verbosity::ErrorsOnly` instead of `Silent`, reads kitty's response, and
+  writes a plain PASS/FAIL result directly to a file on the host
+  filesystem — not through kitty's own text-capture remote-control actions,
+  for the same reason noted in the original WezTerm research: APC responses
+  are program-visible (read by our own process from its stdin), not part of
+  on-screen "text" content a `get-text`-style action would capture.
+- **Orchestrating test.** A `#[test]`, `#[ignore]`'d by default (needs the
+  kitty binary and Xvfb present, isn't part of the fast unit-test loop), that
+  starts Xvfb + kitty, spawns the harness, polls the result file, asserts
+  PASS, and tears both down. Run explicitly or from a dedicated CI job —
+  never folded into the existing fmt/clippy/test/90%-coverage gate, which
+  must stay fast and independent of external binaries/a virtual display.
 
 ## Boundaries
 
-- **Always:** treat WezTerm as dev-only tooling; verify downloaded binaries
-  against their published `.sha256` checksums before use; keep this test
+- **Always:** treat kitty (and Xvfb) as dev-only tooling; verify downloaded
+  binaries against their published signatures before use; keep this test
   suite fully separate from (and non-blocking to) the existing quality gate.
-- **Ask first:** the specific WezTerm version to pin (reproducibility vs.
-  staying current); the exact provisioning mechanism if a cleaner option than
-  a pinned-download script turns up during implementation (e.g. if `mise`
-  gains a registry entry, or if Homebrew/apt pinning is preferred over raw
-  GitHub Releases for local dev).
-- **Never:** add WezTerm as a build or runtime dependency of any guiltty
-  crate; build WezTerm from source as part of this project's own build/test
-  process; vendor WezTerm's source; make this E2E suite a required check
-  that blocks the existing fast quality gate.
+- **Ask first:** the specific kitty version to pin; the exact provisioning
+  mechanism (pinned download script vs. any `mise` entry, if one exists);
+  whether/how to pursue the Tier 2 (pixel-level) screenshot prototype once
+  Tier 1 is working, given it needs real derisking work first.
+- **Never:** add kitty as a build or runtime dependency of any guiltty
+  crate; build kitty from source as part of this project's own build/test
+  process; vendor kitty's source; make this E2E suite a required check that
+  blocks the existing fast quality gate.
 
 ## Success Criteria
 
-1. A documented, scripted way to fetch a pinned, checksum-verified WezTerm
+1. A documented, scripted way to fetch a pinned, signature-verified kitty
    release binary for Linux and macOS without building from source (BSD:
-   documented as "use the platform's package manager instead").
-2. A headless `wezterm-mux-server`-based harness that spawns a guiltty-built
-   `Canvas`'s `present()` output inside a real WezTerm-managed pane and
-   captures whether the kitty graphics protocol commands were accepted (OK)
-   or rejected (error) — with no GUI or display server involved.
+   documented as "use the platform's package manager instead," matching the
+   same gap identified for WezTerm).
+2. A headless (Xvfb-backed) kitty instance that a test harness can drive via
+   remote control, presenting a guiltty `Canvas` and capturing whether the
+   kitty graphics protocol commands were accepted (OK) or rejected (error).
 3. At least one `#[ignore]`'d automated test exercising this against T1/T4's
    existing `present()` path, runnable on demand, separate from the default
    `cargo test --workspace` gate.
 4. A documented manual procedure for actual pixel-level visual confirmation
-   (attach a real WezTerm GUI client to the same mux session) — replacing
-   "no terminal available in this environment" with a concrete, run-it-
-   yourself set of steps.
+   using a real, non-virtualized kitty instance — replacing "no terminal
+   available in this environment" with a concrete, run-it-yourself set of
+   steps, regardless of whether the Tier 2 automated screenshot path pans
+   out.
 
 ## Open Questions
 
-- Exact pixel-level automated visual verification mechanism, if one turns
-  out to exist or becomes available later (no WezTerm-native screenshot/
-  pixel-capture capability was found during this spec's research) — tier 2,
-  not blocking.
+- Whether the Tier 2 screenshot approach (Xvfb + software rendering +
+  standard X11 screenshot tooling) is stable/reliable enough to trust for
+  automated pixel comparison — needs a prototyping spike before committing
+  to it as a Success Criterion rather than a stretch goal.
+- Exact provisioning mechanism: whether `mise`'s registry has (or gains) a
+  kitty entry, vs. a custom pinned-download script.
 - CI platform coverage: GitHub Actions runners are Linux/macOS/Windows, so
   the automated tier-1 suite is Linux/macOS only in CI even though guiltty
   itself targets BSDs too; BSD verification stays a manual, local-only
-  procedure.
+  procedure (same as the original WezTerm-based plan).
 - Whether the harness should use kittage's synchronous `Action::execute`
   (blocks on reading the terminal's response) or a different read strategy —
   needs prototyping once implementation starts.
-- Exact WezTerm version to pin, and where that pin lives (a new `mise.toml`
-  entry once/if one becomes available, a version file, or embedded directly
-  in the provisioning script) — deferred to the implementation task per the
-  Boundaries' "ask first" note above.
+- Exact kitty version to pin, and where that pin lives — deferred to the
+  implementation task per the Boundaries' "ask first" note above.
