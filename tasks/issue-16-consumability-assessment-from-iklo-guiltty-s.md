@@ -16,7 +16,7 @@ scoped by this issue.
 
 ---
 
-- [ ] **T1 — Fix README's stale "Status" section**
+- [x] **T1 — Fix README's stale "Status" section** — ✅ merged (#17)
 
 Acceptance:
 - `README.md`'s status section no longer claims "no Canvas, no shapes, no
@@ -40,7 +40,7 @@ Dependencies: none.
 
 ---
 
-- [ ] **T2 — Declare an MSRV**
+- [x] **T2 — Declare an MSRV** — ✅ merged (#18)
 
 Acceptance:
 - `rust-version` is set (workspace-level in the root `Cargo.toml`'s
