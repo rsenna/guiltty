@@ -605,9 +605,10 @@ impl Canvas {
             .unwrap()
             .min(canvas_h - 1);
 
+        let mut crossings: Vec<f64> = Vec::new();
         for y in min_y..=max_y {
             let yf = y as f64 + 0.5;
-            let mut crossings: Vec<f64> = Vec::new();
+            crossings.clear();
             for i in 0..n {
                 let p1 = points[i];
                 let p2 = points[(i + 1) % n];
@@ -619,11 +620,28 @@ impl Canvas {
                     crossings.push(x1 + t * (x2 - x1));
                 }
             }
-            crossings.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            // A closed polygon always crosses any scanline through its interior an even
+            // number of times; an odd count would mean degenerate input (e.g. a
+            // duplicated point) produced a malformed edge list. `chunks_exact(2)` below
+            // would silently drop a trailing unpaired crossing, so assert the invariant
+            // explicitly in debug builds rather than let that happen unnoticed.
+            debug_assert!(
+                crossings.len().is_multiple_of(2),
+                "polygon scanline crossing count must be even, got {}",
+                crossings.len()
+            );
+            crossings.sort_by(|a, b| a.total_cmp(b));
 
             for pair in crossings.chunks_exact(2) {
-                let x_lo = (pair[0].ceil() as i64).max(0);
-                let x_hi = (pair[1].floor() as i64 + 1).min(canvas_w);
+                // Consistent pixel-center sampling with `yf` above: column x is "inside"
+                // iff its center (x + 0.5) falls within [pair[0], pair[1]) -- i.e.
+                // x_lo/x_hi are the smallest integers satisfying x + 0.5 >= pair[0] and
+                // x + 0.5 >= pair[1], respectively. Using raw ceil/floor on the crossing
+                // coordinates themselves (without this offset) would fill an extra
+                // column whenever a crossing lands on an exact integer, asymmetric with
+                // how `yf`'s +0.5 offset already treats row boundaries.
+                let x_lo = ((pair[0] - 0.5).ceil() as i64).max(0);
+                let x_hi = ((pair[1] - 0.5).ceil() as i64).min(canvas_w);
                 for x in x_lo..x_hi {
                     self.set_pixel(x as u32, y as u32, color);
                 }
@@ -1205,7 +1223,7 @@ mod tests {
             Fill::solid(color),
         );
         assert_eq!(c.pixel(3, 3), Some(color)); // the pinch row: filled edge-to-edge
-        assert_eq!(c.pixel(2, 2), Some(color)); // left lobe
+        assert_eq!(c.pixel(1, 2), Some(color)); // left lobe
         assert_eq!(c.pixel(5, 2), Some(color)); // right lobe
         assert_eq!(c.pixel(3, 1), Some(Color::default())); // gap between the two lobes
         assert_eq!(c.pixel(0, 0), Some(Color::default())); // outside entirely
