@@ -1,17 +1,20 @@
-//! Kitty graphics protocol backend: encodes and transmits canvas state as
-//! raw kitty escape sequences. No C FFI, no dependency on `kittage`/`little-kitty`.
+//! Kitty graphics protocol backend: encodes and transmits canvas state as kitty
+//! escape sequences, built on the [`kittage`] crate for protocol encoding rather than
+//! hand-rolling escape-sequence construction (see the module's git history for the
+//! original hand-rolled implementation and the reasoning behind switching).
 //!
 //! Requires a kitty-compatible terminal supporting protocol version 0.20.0 or later
 //! (needed for the `C` "don't move cursor" control key used by [`KittyBackend::present`]).
 
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine as _;
 use guiltty_core::{Backend, Canvas, Error};
+use kittage::action::Action;
+use kittage::display::{CursorMovementPolicy, DisplayConfig};
+use kittage::image::Image;
+use kittage::medium::{ChunkSize, Medium};
+use kittage::{ImageDimensions, NumberOrId, PixelFormat, Verbosity};
 use std::io::{self, Write};
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering};
-
-/// Maximum base64-encoded bytes per APC chunk, per the kitty graphics protocol spec.
-const MAX_CHUNK_LEN: usize = 4096;
 
 /// Hands out a fresh, terminal-global-namespace-unique image id to every `KittyBackend`
 /// instance, so independent backends don't collide by all claiming the same id (which
@@ -72,71 +75,100 @@ impl<W: Write> Backend for KittyBackend<W> {
     type Error = Error;
 
     fn present(&mut self, canvas: &Canvas) -> Result<(), Error> {
-        let to_backend_err = |e: io::Error| Error::Backend(e.to_string());
+        let to_backend_err = |e: std::io::Error| Error::Backend(e.to_string());
 
-        let rgba = canvas.rgba8_bytes();
-        let encoded = BASE64.encode(&rgba);
-        let chunks: Vec<&[u8]> = encoded.as_bytes().chunks(MAX_CHUNK_LEN).collect();
-
-        // A zero-width/height canvas has no valid kitty raw-image representation
-        // (s=0,v=0 is not a well-formed image) -- there's nothing to present, so no-op.
-        if chunks.is_empty() {
+        let (w, h) = (canvas.width(), canvas.height());
+        if w == 0 || h == 0 {
+            // A zero-width/height canvas has no valid kitty raw-image representation --
+            // there's nothing to present, so no-op.
             return Ok(());
         }
 
-        let last_index = chunks.len() - 1;
-        for (i, chunk) in chunks.iter().enumerate() {
-            let more = u8::from(i != last_index);
-            if i == 0 {
-                // i=<image_id>: this instance's unique image id (see NEXT_IMAGE_ID) --
-                // repeated present() calls target the same image instead of colliding
-                // with other backend instances' images.
-                // p=<image_id>: a fixed placement id (reusing the image id's numeric
-                // value; placement ids are namespaced per-image, so no cross-instance
-                // collision risk). Pinning an explicit placement id, rather than relying
-                // on a=T's implicit default placement, is what keeps repeated present()
-                // calls updating the SAME on-screen placement -- NOTE: this has not been
-                // verified against a real kitty terminal (none available in this
-                // environment); if repeated present() calls are found to blank the
-                // image in practice, revisit with an explicit a=t (transmit-only) +
-                // a=p (placement) split instead of combined a=T.
-                // q=2: suppress the terminal's OK/error APC responses, so callers that
-                // read stdin afterward don't see them interleaved with real input.
-                // C=1: don't move the cursor after displaying, so repeated present()
-                // calls redraw at the same canvas origin instead of drifting down.
-                // Requires kitty >= 0.20.0 (see module docs).
-                write!(
-                    self.writer,
-                    "\x1b_Ga=T,f=32,i={},p={},q=2,C=1,s={},v={},m={};",
-                    self.image_id,
-                    self.image_id,
-                    canvas.width(),
-                    canvas.height(),
-                    more
-                )
-                .map_err(to_backend_err)?;
-            } else {
-                write!(self.writer, "\x1b_Gm={};", more).map_err(to_backend_err)?;
-            }
-            // Written as raw bytes rather than through a `str`/`write!` conversion --
-            // base64 output is always ASCII, but this avoids an unnecessary UTF-8
-            // validation (and its associated `expect`/panic risk) on the hot path.
-            self.writer.write_all(chunk).map_err(to_backend_err)?;
-            self.writer.write_all(b"\x1b\\").map_err(to_backend_err)?;
-        }
-        self.writer.flush().map_err(to_backend_err)
+        let rgba = canvas.rgba8_bytes();
+        // NOTE: kittage's own ImageDimensions doc comment says width/height are "divided
+        // by 4 (for some reason)" -- verified empirically (see PR discussion) that for
+        // this Direct-medium transmit path, raw pixel width/height produce the correct
+        // s=/v= control-key values (no /4 scaling applied) -- confirmed by inspecting
+        // actual encoder output, not by real-terminal rendering (still unverified end to
+        // end). If real-terminal testing ever shows a 4x size/position mismatch, this is
+        // the first place to look.
+        let dims = ImageDimensions {
+            width: w,
+            height: h,
+        };
+
+        let id = NonZeroU32::new(self.image_id).expect("image_id is never zero");
+
+        let image = Image {
+            num_or_id: NumberOrId::Id(id),
+            format: PixelFormat::Rgba32(dims, None),
+            medium: Medium::Direct {
+                // Max allowed chunk size (1024 * 4-byte units = 4096 base64 bytes per
+                // escape code, the protocol's limit) -- kittage does NOT chunk
+                // automatically when this is None; it silently emits one oversized
+                // escape sequence instead (verified: a 100x100 canvas produced one
+                // ~53KB escape code with no chunk_size set). This must be set
+                // explicitly.
+                chunk_size: ChunkSize::new(std::num::NonZeroU16::new(1024).unwrap()),
+                data: std::borrow::Cow::Borrowed(&rgba),
+            },
+        };
+
+        let config = DisplayConfig {
+            cursor_movement: CursorMovementPolicy::DontMove,
+            ..Default::default()
+        };
+
+        let action = Action::TransmitAndDisplay {
+            image,
+            config,
+            // Explicit placement id (same numeric value as the image id -- placement
+            // ids are namespaced per-image, so no cross-instance collision risk) so
+            // repeated present() calls target the same on-screen placement instead of
+            // relying on TransmitAndDisplay's implicit default placement.
+            placement_id: Some(id),
+        };
+
+        action
+            .write_transmit_to(&mut self.writer, Verbosity::Silent)
+            .map_err(to_backend_err)?;
+        self.writer
+            .flush()
+            .map_err(|e| Error::Backend(e.to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // kittage's own base64 encoding (base64-simd) emits unpadded output (no trailing
+    // "=" characters) -- NO_PAD, not STANDARD, or decoding fails with "Invalid padding".
+    use base64::engine::general_purpose::STANDARD_NO_PAD as BASE64;
+    use base64::Engine as _;
 
     fn present_to_buf(canvas: &Canvas) -> String {
         let mut buf = Vec::new();
         let mut backend = KittyBackend::with_writer(&mut buf);
         backend.present(canvas).expect("present should succeed");
-        String::from_utf8(buf).expect("output should be valid UTF-8")
+        let out = String::from_utf8(buf).expect("output should be valid UTF-8");
+        // Known kittage 0.4.0 quirk (confirmed via byte-level inspection, reported
+        // upstream): write_transmit_to writes the ESC-backslash string terminator
+        // TWICE at the very end of the final (m=0) chunk -- single-chunk output and
+        // the last chunk of multi-chunk output alike. Believed harmless in practice
+        // (an extra empty escape sequence with nothing preceding it), but
+        // real-terminal behavior is unverified. Strip the duplicate here so tests
+        // assert against the single well-formed terminator our test parsing logic
+        // expects; NOT stripped in the actual present() implementation, since
+        // "harmless duplicate" is an assumption, not a verified fact -- silently
+        // rewriting kittage's output ourselves would just trade one unverified
+        // assumption for another.
+        assert!(
+            out.ends_with("\x1b\\\x1b\\"),
+            "expected the known kittage double-terminator quirk; if this fails, \
+             kittage may have fixed it upstream -- remove this workaround and \
+             re-check present()'s own behavior is still correct"
+        );
+        out[..out.len() - "\x1b\\".len()].to_string()
     }
 
     #[test]
@@ -144,8 +176,11 @@ mod tests {
         let canvas = Canvas::new(2, 1);
         let out = present_to_buf(&canvas);
 
-        assert!(out.starts_with("\x1b_Ga=T,f=32,i="));
-        assert!(out.contains(",q=2,C=1,s=2,v=1,m=0;"));
+        assert!(out.starts_with("\x1b_Ga=T,i="));
+        // Control keys kittage includes that our own hand-rolled version didn't:
+        // p= (explicit placement id, alongside i=) and t=d (transmission medium,
+        // "direct" -- kitty defaults to this when omitted, but kittage is explicit).
+        assert!(out.contains(",q=2,C=1,f=32,s=2,v=1,t=d,m=0;"));
         assert!(out.ends_with("\x1b\\"));
 
         let payload_start = out.find(';').unwrap() + 1;
@@ -214,10 +249,15 @@ mod tests {
 
     #[test]
     fn present_zero_size_canvas_is_a_noop() {
+        // Not routed through present_to_buf(), which asserts the known
+        // double-terminator quirk -- a zero-size canvas short-circuits before ever
+        // calling kittage, so there's no output (and no terminator) at all.
         let canvas = Canvas::new(0, 0);
-        let out = present_to_buf(&canvas);
-        assert_eq!(
-            out, "",
+        let mut buf = Vec::new();
+        let mut backend = KittyBackend::with_writer(&mut buf);
+        backend.present(&canvas).expect("present should succeed");
+        assert!(
+            buf.is_empty(),
             "a zero-size canvas has no valid kitty image representation"
         );
     }

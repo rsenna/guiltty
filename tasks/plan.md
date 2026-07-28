@@ -29,7 +29,7 @@ demonstrates what's covered by T1–T3.
 
 ---
 
-- [ ] **T1 — Kitty protocol: encode and transmit a static image** 🔒 — code implemented (PR #21), but kept unchecked: the manual real-terminal visual verification required by this task's own Verify section has not happened (no kitty-compatible terminal available in this environment), and review has surfaced at least one open protocol question (whether repeated `present()` calls reliably update the same placement rather than blanking it) that can only be resolved by that verification. Check this box once a human confirms it renders correctly in a real terminal.
+- [ ] **T1 — Kitty protocol: encode and transmit a static image** 🔒 — implemented twice: first hand-rolled (PR #21), then reimplemented on top of the `kittage` crate (see PR after this note) once review of the hand-rolled version surfaced enough real protocol subtleties (cursor movement, image/placement identity, a chunking footgun found in kittage itself and reported upstream) that adopting a maintained encoder made more sense than continuing to hand-roll. Kept unchecked either way: the manual real-terminal visual verification required by this task's own Verify section still hasn't happened (no kitty-compatible terminal available in this environment), and switching encoders does not resolve the still-open protocol question (whether repeated `present()` calls reliably update the same placement rather than blanking it) -- that's a question about terminal *behavior*, not encoding correctness, and only real-terminal testing can answer it. Check this box once a human confirms it renders correctly in a real terminal.
 
 Acceptance:
 - The `Backend` trait (`crates/guiltty-core/src/lib.rs`) changes from

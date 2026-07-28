@@ -13,5 +13,8 @@ description = "Kitty graphics protocol backend for guiltty (pure Rust, no C FFI)
 workspace = true
 
 [dependencies]
-base64 = "0.23.0"
 guiltty-core = { path = "../guiltty-core" }
+kittage = { version = "0.4.0", features = ["image-crate"] }
+
+[dev-dependencies]
+base64 = "0.23.0"
