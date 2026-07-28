@@ -29,7 +29,7 @@ demonstrates what's covered by T1–T3.
 
 ---
 
-- [ ] **T1 — Kitty protocol: encode and transmit a static image** 🔒
+- [ ] **T1 — Kitty protocol: encode and transmit a static image** 🔒 — code implemented (PR #21), but kept unchecked: the manual real-terminal visual verification required by this task's own Verify section has not happened (no kitty-compatible terminal available in this environment), and review has surfaced at least one open protocol question (whether repeated `present()` calls reliably update the same placement rather than blanking it) that can only be resolved by that verification. Check this box once a human confirms it renders correctly in a real terminal.
 
 Acceptance:
 - The `Backend` trait (`crates/guiltty-core/src/lib.rs`) changes from
