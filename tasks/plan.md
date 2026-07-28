@@ -84,14 +84,18 @@ Dependencies: none.
 Acceptance:
 - `Canvas::draw_shape` fills closed `Shape::Path` variants with `Fill::Solid`
   (currently stroke-only per the type's own doc comment in
-  `crates/guiltty-core/src/lib.rs`) using a standard scanline/even-odd or
-  nonzero-winding polygon fill algorithm, consistent with the existing
-  `fill_triangle`/`fill_ellipse` style already in the file.
+  `crates/guiltty-core/src/lib.rs`) using a scanline polygon fill with the
+  **even-odd rule** (simpler than nonzero-winding, standard for a scanline
+  fill, and sufficient since v0 doesn't need winding-direction semantics) —
+  consistent with the existing `fill_triangle`/`fill_ellipse` style already
+  in the file. Document the chosen rule in `Shape::Path`'s doc comment.
 - Open (non-closed) paths remain stroke-only — filling an open path isn't
   geometrically well-defined without deciding an implicit closing edge,
   which spec.md doesn't call for.
 - New unit tests assert pixel-buffer fill correctness for at least one
-  convex and one concave closed path, following the existing test style
+  convex closed path, one concave closed path, and one **self-intersecting**
+  closed path (to lock down the even-odd rule's behavior, which the convex/
+  concave cases alone don't exercise), following the existing test style
   (`draw_shape`/`fill_*` tests already in the file).
 
 Verify:
@@ -116,9 +120,15 @@ Acceptance:
   `png` crate) — this is an explicit 🔒 ask-first item per spec.md's
   Boundaries ("adding any new external dependency"). **Pause and get
   approval on the specific crate before implementing.**
-- New unit test loads a small fixture image (checked into the repo, e.g.
-  under a `crates/guiltty-core/tests/fixtures/` or similar) and asserts the
-  resulting `Bitmap`'s dimensions/pixel data match expectations.
+- Decoded pixel data is converted to the project-wide RGBA8 color model
+  (spec.md's Tech Stack) regardless of the source image's native format —
+  e.g. an RGB or grayscale PNG must be converted to RGBA8 with a fully-opaque
+  default alpha, not just passed through in its native format.
+- New unit tests load small fixture images (checked into the repo, e.g.
+  under a `crates/guiltty-core/tests/fixtures/` or similar) covering at
+  least one non-RGBA source format (e.g. RGB or grayscale PNG) and assert
+  the resulting `Bitmap`'s dimensions/pixel data match expectations
+  *after* RGBA8 conversion, including the default alpha value.
 - New unit tests also cover the recoverable-error paths promised above: a
   missing file and a malformed/corrupt image both return `Err(...)` rather
   than panicking, protecting the public API's documented no-panic boundary
@@ -140,10 +150,13 @@ Acceptance:
 - `examples/src/bin/placeholder.rs` is replaced (or a new example binary is
   added and the placeholder removed) with a real demo that: creates a
   `Canvas`, draws text and at least one shape of each kind covered so far
-  (including a filled closed `Path` per T2), places and moves a `Sprite`
-  (using a `Bitmap::from_file`-loaded image per T3 if that task has landed,
-  otherwise `Bitmap::solid`), and calls `present()` (updated signature per
-  T1) to actually render via `KittyBackend`.
+  (including a filled closed `Path` per T2), places a `Sprite` (using a
+  `Bitmap::from_file`-loaded image per T3 if that task has landed, otherwise
+  `Bitmap::solid`), and calls `present()` (updated signature per T1) to
+  render an initial frame. It then **moves the sprite and calls `present()`
+  a second time**, rendering a second frame — a single present() call after
+  an in-memory move would satisfy this criterion without ever visibly
+  proving movement or background preservation, so both frames are required.
 - A human running the example in a real kitty-compatible terminal can
   visually verify canvas/text/shapes/sprite rendering, per spec.md's
   Testing Strategy manual-verification approach.
