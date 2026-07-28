@@ -710,7 +710,7 @@ impl Bitmap {
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Error> {
         let img = image::open(path.as_ref())
             .map_err(|e| Error::ImageLoad(format!("{}: {e}", path.as_ref().display())))?;
-        let rgba = img.to_rgba8();
+        let rgba = img.into_rgba8();
         let (width, height) = rgba.dimensions();
         let pixels = rgba
             .pixels()
