@@ -17,8 +17,11 @@ projects have explored building graphical UIs on top of it (for example,
 [`kui.nvim`](https://github.com/romgrk/kui.nvim)), but the ecosystem remains small and the
 results have generally been experimental.
 
-`guiltty` aims to provide both a drawable canvas and a set of reusable UI controls as a
-standalone, host-independent Rust library.
+`guiltty` aims to provide that same capability — drawable canvases, shapes, sprites, and
+viewports — as a standalone, host-independent Rust library, rather than tying it to a single
+host application. It does not aim to provide interactive UI controls (buttons, clickable
+widgets) or event handling — see [`docs/spec.md`](docs/spec.md)'s Boundaries for what's
+explicitly out of scope.
 
 ## Status: early scaffold, pre-alpha
 
@@ -26,16 +29,16 @@ This project is still in its early stages of development, but its ambitions are 
 
 Its goals include:
 
-- [x] Creating canvases. [**DONE**]
-- [x] Drawing text and vector shapes. [**DONE**]
-- [x] Placing and animating sprites over preserved backgrounds. [**DONE**]
-- [x] Encoding and transmitting frames via the kitty graphics protocol. [**DONE**]
-- [ ] Confirming live rendering against a real kitty-compatible terminal. [_IN-PROGRESS_]</br>
-      Code-complete but unverified: there's no kitty-compatible terminal currently available in this project.</br>
-      See the [Spec](docs/spec-kitty-e2e.md) for the planned automated + manual verification work.
-- [ ] Carving a terminal into multiple independent viewports. [NOT Started]</br>
-      Deferred pending a design pass, [Viewport: Regions Zoom Scroll](docs/design/viewport-regions-zoom-scroll.md) not yet written.
-- [ ] Zooming and panning across large canvases. [NOT Started]</br>
+- [x] Creating canvases. **[DONE]**
+- [x] Drawing text and vector shapes. **[DONE]**
+- [x] Placing and animating sprites over preserved backgrounds. **[DONE]**
+- [x] Encoding and transmitting frames via the kitty graphics protocol. **[DONE]**
+- [ ] Confirming live rendering against a real kitty-compatible terminal. **[IN PROGRESS]**<br/>
+      Code-complete but unverified: no kitty-compatible terminal has been available in this environment.<br/>
+      See [`docs/spec-kitty-e2e.md`](docs/spec-kitty-e2e.md) for the planned automated + manual verification work.
+- [ ] Carving a terminal into multiple independent viewports. **[NOT STARTED]**<br/>
+      Deferred pending a design pass (`docs/design/viewport-regions-zoom-scroll.md`, not yet written).
+- [ ] Zooming and panning across large canvases. **[NOT STARTED]**<br/>
       Same reason as above.
 
 What exists today:
@@ -46,14 +49,17 @@ What exists today:
   `Backend` trait that rendering backends implement; and a `Canvas` supporting text, shape
   drawing (lines, rectangles, circles, ellipses, triangles, and arbitrary paths), and movable
   `Sprite`s over a preserved background — all implemented and unit-tested.
-- `guiltty-kitty`: a `KittyBackend` scaffold implementing `Backend` — no actual escape-sequence
-  encoding or terminal transmission yet.
+- `guiltty-kitty`: a `KittyBackend` implementing `Backend` — encodes and transmits a `Canvas`'s
+  pixel buffer as a real kitty graphics protocol escape sequence (built on the
+  [`kittage`](https://github.com/itsjunetime/kittage) crate), covered by protocol-level tests.
+  Not yet confirmed against a real terminal — see the goals checklist above.
 - `guiltty`: a facade crate re-exporting the above.
+- A runnable example (`examples/src/bin/demo.rs`) exercising canvas/text/shapes/sprites and two
+  rendered frames, for manual visual verification once a kitty-compatible terminal is available.
 
-**Terminal rendering not yet happening** — `KittyBackend::present()` is still a stub, so there's
-no real kitty-protocol wire encoding, no independent viewport regions, no zoom, no
-scroll/pan for canvases larger than the terminal, and no working end-to-end example. See
-[`docs/spec.md`](docs/spec.md)'s Success Criteria for what v0 will include once built, and
+**Still missing:** independent viewport regions, zoom, and scroll/pan for canvases larger than
+the terminal (see the goals checklist above). See [`docs/spec.md`](docs/spec.md)'s Success
+Criteria for the full v0 scope, and
 [`docs/intent/kitty-graphics-ui-toolkit.md`](docs/intent/kitty-graphics-ui-toolkit.md) for the
 confirmed project intent this spec implements.
 
