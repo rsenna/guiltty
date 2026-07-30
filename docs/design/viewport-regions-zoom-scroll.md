@@ -35,14 +35,18 @@ buffer as a single kitty image at whatever the cursor's current position is
 beyond that. `tasks/plan.md`'s T1 task explicitly deferred multi-image
 placement to this design pass (see that task's "Note on scope").
 
-## Decision: three new `Canvas` primitives, no `Backend` changes
+## Decision: three new `Canvas` primitives, no further `Backend` changes
 
 Everything below is built from **three new methods on `Canvas`**
 (`crop`, `blit`, `scaled`), all pure `guiltty-core` logic with no
 backend-specific code (per `docs/spec.md`'s Boundaries: "keep
-`guiltty-core` free of any kitty-specific code"). The `Backend` trait is
-**not changed** — every feature below still ends in a plain
-`Backend::present(&Canvas)` call, exactly as today.
+`guiltty-core` free of any kitty-specific code"). This design requires
+**no changes to the `Backend` trait beyond what `tasks/plan.md`'s T1
+already established** — `Backend::present(&mut self, canvas: &Canvas)`
+already takes a `Canvas` (T1's signature migration, implemented and
+merged; only its manual real-terminal verification checkbox remains
+unticked). Every feature below still ends in that same
+`Backend::present(&Canvas)` call, unmodified.
 
 ```rust
 impl Canvas {

@@ -80,6 +80,17 @@ loop {
 }
 ```
 
+The `terminal.set_zoom(...)`/`frame.viewport(...)` lines above illustrate a
+possible future `Terminal`/`Frame` convenience layer — not what actually got
+built. [`docs/design/viewport-regions-zoom-scroll.md`](design/viewport-regions-zoom-scroll.md)
+resolved zoom/viewports/scroll-pan without that layer: the real, near-term
+API is `Canvas::crop`/`blit`/`scaled`, called directly, with no
+`Terminal`/`Frame` wrapper. That design doc's Non-goals section explicitly
+leaves building this convenience layer as an open, undecided future
+possibility (not ruled out, just not part of this work) — if it's ever
+built, it would sit on top of `crop`/`blit`/`scaled` rather than requiring
+anything different from them.
+
 ## Testing Strategy
 
 - **Unit tests** (in `guiltty-core`): shape rasterization correctness (pixel buffer assertions against expected output), canvas/sprite/region state transitions, zoom/scroll math — these run in CI with no terminal required.
