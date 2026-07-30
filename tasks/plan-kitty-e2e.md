@@ -10,7 +10,7 @@ available in this environment). Task IDs here are prefixed `K` (not `T`) to
 avoid collision with `tasks/plan.md`'s own T1–T4 when the two files are
 referenced together.
 
-Quality gate (code-affecting tasks): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90`. Per the spec's Boundaries, this E2E suite itself must stay **separate from and non-blocking to** that gate — it is `#[ignore]`'d and/or run from a dedicated CI job, never folded into the default `cargo test --workspace` run.
+Quality gate (code-affecting tasks): same commands as [`tasks/plan.md`](plan.md)'s Quality gate line — not restated here to avoid the two files drifting out of sync. Per the spec's Boundaries, this E2E suite itself must stay **separate from and non-blocking to** that gate — it is `#[ignore]`'d and/or run from a dedicated CI job, never folded into the default `cargo test --workspace` run.
 
 Sequencing: **K1 first** — nothing else can run without a provisioned kitty binary. **K2 depends on K1** only in the sense that it needs a kitty binary to test against locally while developing it, not a hard code dependency. **K3 depends on K1 and K2** — it orchestrates both. **K4 (the documented manual procedure) is independent** of K1–K3 and can be written any time; it's pure documentation of a manual, non-virtualized workflow.
 
@@ -27,7 +27,7 @@ Verify:
 - Run the fetch script on a clean checkout (or CI) and confirm it produces a working `kitty` binary whose version matches the pinned value.
 - Local: quality gate above is unaffected (this task touches no Rust code).
 
-Files: new provisioning script (location TBD — e.g. `scripts/fetch-kitty.sh`), possibly `mise.toml` if `mise`'s registry turns out to have a kitty entry (check before writing a custom script).
+Files: `scripts/fetch-kitty.sh` (new); possibly `mise.toml` instead, if `mise`'s registry turns out to have a kitty entry (check before writing the custom script — if one exists, use it and drop the script from this task's scope).
 
 Dependencies: none.
 
@@ -38,15 +38,15 @@ Dependencies: none.
 - [ ] **K2 — Test harness binary: present a Canvas, capture kitty's accept/reject response**
 
 Acceptance:
-- A small, dedicated binary (not a `#[test]` — it must run as a standalone process inside a real kitty window, spawned via kitty's `launch` remote-control action) builds a `Canvas` exercising `present()`, transmits it using `Verbosity::ErrorsOnly` (or `All`) instead of `Silent`, and reads kitty's response from its own stdin (its window's PTY) — not via any remote-control text-capture action, since APC responses aren't on-screen "text" content.
+- A small, dedicated binary (not a `#[test]` — it must run as a standalone process inside a real kitty window, spawned via kitty's `launch` remote-control action) builds a `Canvas` and exercises the same **encoding path `KittyBackend::present()` uses** (the `kittage::Action::TransmitAndDisplay` construction currently in `crates/guiltty-kitty/src/lib.rs`), but does **not** call `present()` itself: `present()` hard-codes `Verbosity::Silent` and `write_transmit_to` (fire-and-forget, no response read), neither of which this harness can use. Instead the harness builds the equivalent `Action` directly with `Verbosity::ErrorsOnly` (or `All`) and calls `Action::execute` (per the spec's stated preference — see Dependencies note below) to read kitty's OK/error response from its own stdin (its window's PTY) — not via any remote-control text-capture action, since APC responses aren't on-screen "text" content.
 - Writes a plain PASS/FAIL result to a **unique temporary file path** passed in as an argument (never a fixed/well-known path — avoids races between concurrent runs and stale-result false positives).
-- Reuses kittage's `Action::execute` (or documents why a different read strategy was chosen instead) per the spec's open question on this point.
+- If prototyping shows `Action::execute` isn't suitable (e.g. its blocking-read strategy doesn't fit this harness's needs), document the alternative read strategy actually used and why, per the spec's open question on this point.
 
 Verify:
 - Manually launch the harness inside a real (or Xvfb-backed) kitty window and confirm it writes a correct PASS/FAIL result file for both an accepted and a deliberately malformed transmission.
 - Local: quality gate above (the harness binary itself should be fmt/clippy-clean; full coverage isn't expected for a manual-launch-only binary, but keep it simple enough not to need much).
 
-Files: new binary target — exact crate/location TBD during implementation (e.g. a `[[bin]]` in `guiltty-kitty` gated as dev-only, or a small dedicated harness crate under `tests/`).
+Files: `examples/src/bin/kitty_e2e_harness.rs` (new) — reuses the existing `guiltty-examples` crate's binary-target convention rather than adding a new dedicated crate.
 
 Dependencies: none at the code level (can be written before K1 lands), but needs a kitty binary (K1) to actually exercise it against.
 
@@ -55,15 +55,15 @@ Dependencies: none at the code level (can be written before K1 lands), but needs
 - [ ] **K3 — Headless orchestration: Xvfb + kitty + `#[ignore]`'d test** 🔒
 
 Acceptance:
-- A `#[test]`, `#[ignore]`'d by default (needs the kitty binary and Xvfb present — not part of the fast unit-test loop), that: starts Xvfb, starts kitty configured for software rendering with `allow_remote_control=socket-only --listen-on unix:<unique-per-run-path>` (a fresh path per invocation, e.g. including the test's own process id, to avoid colliding with an unrelated kitty instance or a concurrent test run), issues the `launch` remote-control action to spawn K2's harness inside that kitty window, polls the harness's result file against a **hard deadline** (fails rather than hanging if no response ever arrives), and tears down Xvfb/kitty/temp files **unconditionally** — an RAII-style guard (kill on `Drop`), not only on the success path, so a panic or early-return can't leak processes or temp state.
+- A `#[test]`, `#[ignore]`'d by default (needs the kitty binary and Xvfb present — not part of the fast unit-test loop), that: starts Xvfb on a **dynamically allocated display number** (not a fixed `:99`-style number — pick/probe a free display per invocation so concurrent runs or a dev's own already-running X server don't collide), starts kitty configured for software rendering (set `LIBGL_ALWAYS_SOFTWARE=1` in the child process's environment so kitty's GPU-rendering path initializes against Xvfb's virtual framebuffer without real hardware acceleration) with `allow_remote_control=socket-only --listen-on unix:<unique-per-run-path>` (a fresh socket path per invocation, e.g. including the test's own process id, to avoid colliding with an unrelated kitty instance or a concurrent test run), issues the `launch` remote-control action to spawn K2's harness inside that kitty window, polls the harness's result file against a **hard deadline** (fails rather than hanging if no response ever arrives), and tears down Xvfb/kitty/temp files **unconditionally** — an RAII-style guard (kill on `Drop`), not only on the success path, so a panic or early-return can't leak processes or temp state.
 - Confirmed runnable on demand (`cargo test --workspace -- --ignored` or similar), separate from and non-blocking to the existing fmt/clippy/90%-coverage gate; not wired into any required CI check by this task (a follow-up CI-integration task, if wanted, is separate and would itself be a 🔒 CI-change gate).
 - Documented as **Linux-only** (Xvfb is X11-specific, no macOS equivalent) — macOS coverage stays manual, tracked by K4.
 
 Verify:
-- Run the ignored test locally (Linux, with Xvfb + K1's kitty binary available) and confirm it passes against a known-good `present()` call and fails against a deliberately broken one (e.g. a truncated payload).
+- Run the ignored test locally (Linux, with Xvfb + K1's kitty binary available) and confirm it passes against a known-good transmission and fails against a deliberately broken one (e.g. a truncated payload) — and run it twice concurrently to confirm the dynamic display/socket allocation actually prevents the two runs from colliding.
 - Local: quality gate above (the orchestrating test code itself must be fmt/clippy-clean; the `#[ignore]`'d test itself is exempt from the 90% coverage requirement by nature of not running in the default suite, but don't let that become an excuse to leave it untested against both pass and fail cases as noted above).
 
-Files: new test file (location TBD — e.g. `crates/guiltty-kitty/tests/e2e_kitty.rs` or a workspace-level `tests/` integration test), any new dev-dependency needed for process orchestration (subject to the ask-first gate below if one is added).
+Files: `crates/guiltty-kitty/tests/e2e_kitty.rs` (new); any new dev-dependency needed for process orchestration (subject to the ask-first gate below if one is added).
 
 Dependencies: K1, K2.
 
@@ -82,6 +82,6 @@ Verify:
 - A human (not this agent — no kitty-compatible terminal available here) follows the documented steps against the T4 example and confirms canvas/shapes/sprite render correctly and sprite movement doesn't corrupt the background.
 - Local: quality gate above is unaffected (docs-only change).
 
-Files: new doc (e.g. `docs/manual-kitty-verification.md`), possibly a cross-reference edit to `tasks/plan.md` and/or `README.md`.
+Files: `docs/manual-kitty-verification.md` (new); a cross-reference edit to `tasks/plan.md` and/or `README.md`.
 
 Dependencies: none — independent of K1–K3, can be written any time.
