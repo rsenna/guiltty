@@ -6,12 +6,15 @@ This tracks the v0 feature work *not* tied to a GitHub issue (unlike
 `tasks/issue-<n>-<slug>.md` files, which are issue-sourced). It covers only
 the items that are already well-specified by `docs/spec.md` and don't need
 further design work — see the roadmap discussion for why viewport regions
-(#4), zoom (#5), and scroll/pan (#6) are deliberately **not** in this file yet:
-their API shape is an open question in spec.md itself and needs a short
-design pass (a separate `docs/design/viewport-regions-zoom-scroll.md`) before
-they can be broken into tasks. Kitty-protocol image *placement/positioning*
-(i.e. transmitting more than one independently-positioned image) is deferred
-to that same design pass too — see the note after T1 below for why.
+(#4), zoom (#5), and scroll/pan (#6) are deliberately **not** in this file:
+their API shape was an open question in spec.md itself, now resolved by
+[`docs/design/viewport-regions-zoom-scroll.md`](../docs/design/viewport-regions-zoom-scroll.md)
+(two new `Canvas` primitives — `crop`/`blit`/`scaled` — no `Backend` changes).
+That design intentionally decided against needing kitty-protocol image
+*placement/positioning* (transmitting more than one independently-positioned
+image) at all — see the note after T1 below for the original reasoning this
+design has since superseded. Breaking that design into its own tasks (task
+IDs `V1`-`V3`, per that doc's own Follow-up section) hasn't happened yet.
 
 Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90`.
 
