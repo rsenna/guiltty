@@ -84,7 +84,7 @@ loop {
 
 - **Unit tests** (in `guiltty-core`): shape rasterization correctness (pixel buffer assertions against expected output), canvas/sprite/region state transitions, zoom/scroll math — these run in CI with no terminal required.
 - **Protocol tests** (in `guiltty-kitty`): byte-level assertions that canvas state produces the correct kitty escape-sequence encoding, without requiring an actual terminal.
-- **Manual/visual verification**: example binaries in `examples/` are run by hand in a real kitty-protocol-compatible terminal as the acceptance check for actual rendering — this is not automated in v0, and is documented as a manual checklist rather than a CI gate.
+- **Manual/visual verification**: example binaries in `examples/` are run by hand in a real kitty-protocol-compatible terminal as the acceptance check for actual rendering — this is not automated in v0, and is documented as a manual checklist rather than a CI gate. See [docs/spec-kitty-e2e.md](spec-kitty-e2e.md) for a planned automated tier (protocol-acceptance testing against kitty itself, the protocol's reference implementation, run headlessly under Xvfb as a black-box dev-dependency) that narrows but does not eliminate this manual step.
 - **Coverage expectation:** core logic (rasterizer, canvas/sprite/region/zoom state) should be well-covered by unit tests since it's fully testable without a terminal; the kitty transmission layer is covered by protocol/encoding tests; end-to-end visual correctness stays manual for v0.
 
 ## Boundaries
