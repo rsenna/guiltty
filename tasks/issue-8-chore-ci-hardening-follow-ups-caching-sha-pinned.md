@@ -41,7 +41,7 @@ Dependencies: T1 (do the SHA-pinning pass once, covering the new action too, rat
 
 ---
 
-- [ ] **T3 — Configure Dependabot for GitHub Actions** 🔒
+- [x] **T3 — Configure Dependabot for GitHub Actions** 🔒 — ✅ merged (#12)
 
 Acceptance:
 - `.github/dependabot.yml` exists with a `github-actions` ecosystem entry pointed at `/` (or wherever `.github/workflows/` lives relative to repo root), on a reasonable schedule (e.g. weekly).
