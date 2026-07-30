@@ -2,27 +2,43 @@
 
 <img src="./docs/guiltty-mascot.jpg" width="600" alt="Kitty Kay feeling guiltty"/>
 
-A Rust library for drawing real, pixel-level 2D graphics into a terminal, using the
-[kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) as its first
+A Rust library for drawing real, pixel-level 2D graphics in the terminal, using the
+[Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) as its first
 backend.
 
 ## Why
 
-Character-cell TUI toolkits (`ratatui`, `cursive`) can't express real images, smooth shapes,
-or precise positioning — they're built around a grid of character cells. Kitty's graphics
-protocol can draw actual pixels into a compatible terminal, the way
-[`kui.nvim`](https://github.com/romgrk/kui.nvim) demonstrated — but that project is stale and
-locked to Neovim as a host. guiltty aims at the same capability as a standalone,
-host-independent Rust library.
+Currently, TUI toolkits such as [`ratatui`](https://github.com/ratatui/ratatui) and
+[`cursive`](https://github.com/gyscos/cursive) can't display real images, smooth shapes, or
+pixel-precise positioning because they're fundamentally built around a grid of character cells.
 
-When finished, a Rust developer will be able to create a canvas, draw text and shapes into
-it, place and move sprites over a preserved background, carve out multiple independent
-viewport regions within one terminal, zoom a canvas, and work with canvases larger than the
-visible terminal — all rendered live via the kitty graphics protocol.
+The _Kitty Graphics Protocol_, however, can render actual pixels in compatible terminals. A few
+projects have explored building graphical UIs on top of it (for example,
+[`kui.nvim`](https://github.com/romgrk/kui.nvim)), but the ecosystem remains small and the
+results have generally been experimental.
+
+`guiltty` aims to provide both a drawable canvas and a set of reusable UI controls as a
+standalone, host-independent Rust library.
 
 ## Status: early scaffold, pre-alpha
 
-This project is in the earliest stage of development. What exists today:
+This project is still in its early stages of development, but its ambitions are considerable.
+
+Its goals include:
+
+- [x] Creating canvases. [**DONE**]
+- [x] Drawing text and vector shapes. [**DONE**]
+- [x] Placing and animating sprites over preserved backgrounds. [**DONE**]
+- [x] Encoding and transmitting frames via the kitty graphics protocol. [**DONE**]
+- [ ] Confirming live rendering against a real kitty-compatible terminal. [_IN-PROGRESS_]</br>
+      Code-complete but unverified: there's no kitty-compatible terminal currently available in this project.</br>
+      See the [Spec](docs/spec-kitty-e2e.md) for the planned automated + manual verification work.
+- [ ] Carving a terminal into multiple independent viewports. [NOT Started]</br>
+      Deferred pending a design pass, [Viewport: Regions Zoom Scroll](docs/design/viewport-regions-zoom-scroll.md) not yet written.
+- [ ] Zooming and panning across large canvases. [NOT Started]</br>
+      Same reason as above.
+
+What exists today:
 
 - A three-crate Cargo workspace (`guiltty-core`, `guiltty-kitty`, `guiltty`) matching the
   architecture described in [`docs/spec.md`](docs/spec.md).
@@ -34,7 +50,7 @@ This project is in the earliest stage of development. What exists today:
   encoding or terminal transmission yet.
 - `guiltty`: a facade crate re-exporting the above.
 
-**Terminal rendering doesn't exist yet** — `KittyBackend::present()` is still a stub, so there's
+**Terminal rendering not yet happening** — `KittyBackend::present()` is still a stub, so there's
 no real kitty-protocol wire encoding, no independent viewport regions, no zoom, no
 scroll/pan for canvases larger than the terminal, and no working end-to-end example. See
 [`docs/spec.md`](docs/spec.md)'s Success Criteria for what v0 will include once built, and
