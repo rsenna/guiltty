@@ -35,13 +35,14 @@ buffer as a single kitty image at whatever the cursor's current position is
 beyond that. `tasks/plan.md`'s T1 task explicitly deferred multi-image
 placement to this design pass (see that task's "Note on scope").
 
-## Decision: two new `Canvas` primitives, no `Backend` changes
+## Decision: three new `Canvas` primitives, no `Backend` changes
 
-Everything below is built from **two new methods on `Canvas`**, both pure
-`guiltty-core` logic with no backend-specific code (per `docs/spec.md`'s
-Boundaries: "keep `guiltty-core` free of any kitty-specific code"). The
-`Backend` trait is **not changed** — every feature below still ends in a
-plain `Backend::present(&Canvas)` call, exactly as today.
+Everything below is built from **three new methods on `Canvas`**
+(`crop`, `blit`, `scaled`), all pure `guiltty-core` logic with no
+backend-specific code (per `docs/spec.md`'s Boundaries: "keep
+`guiltty-core` free of any kitty-specific code"). The `Backend` trait is
+**not changed** — every feature below still ends in a plain
+`Backend::present(&Canvas)` call, exactly as today.
 
 ```rust
 impl Canvas {
@@ -57,21 +58,33 @@ impl Canvas {
     /// Composites `source`'s pixels into `self` at `at` (top-left), clipped
     /// to `self`'s bounds — any part of `source` that would land outside
     /// `self` is simply not drawn, the same clip-intersection approach
-    /// `draw_sprite` already uses for a `Bitmap` source. Fully transparent
-    /// source pixels (`alpha == 0`) are skipped rather than overwriting,
-    /// matching `draw_sprite`'s existing behavior. Unlike `draw_sprite`,
+    /// `draw_sprite` already uses for a `Bitmap` source. Matching
+    /// `draw_sprite`'s exact existing rule: a source pixel with `alpha ==
+    /// 0` is skipped (destination left untouched); any other alpha value —
+    /// including partial alpha like 128 — replaces the destination pixel
+    /// **verbatim, with no blending**. This is not source-over alpha
+    /// compositing; it's a binary skip-or-overwrite, consistent with the
+    /// project's existing no-anti-aliasing precedent. Unlike `draw_sprite`,
     /// `blit` does **not** save/restore an under-footprint — see "Why no
     /// save/restore-under for blit" below.
     pub fn blit(&mut self, source: &Canvas, at: Point);
 
-    /// Nearest-neighbor resamples `self` to `(width as f32 * factor, height
-    /// as f32 * factor).round()`. `factor` must be finite and `> 0.0`.
+    /// Nearest-neighbor resamples `self` to a new size of `(width as f32 *
+    /// factor).round() as u32` by `(height as f32 * factor).round() as u32`
+    /// — each dimension rounded independently, so a factor that doesn't
+    /// divide evenly can't drift width/height out of proportion beyond
+    /// ordinary rounding. `factor` must be finite and `> 0.0`; the same
+    /// `checked_mul`-based overflow panic `Canvas::new` already has applies
+    /// to the resulting dimensions (no separate overflow handling needed —
+    /// `scaled` computes its target size and calls `Canvas::new` with it).
     ///
     /// # Panics
     /// Panics if `factor` is not finite or is `<= 0.0` — a nonsensical zoom
     /// factor is a programmer error, not a recoverable runtime condition,
     /// consistent with `Canvas::new`'s existing panic-on-nonsensical-size
-    /// precedent.
+    /// precedent. Also panics (via `Canvas::new`) if the resulting
+    /// dimensions overflow, same as creating an oversized canvas directly
+    /// would.
     pub fn scaled(&self, factor: f32) -> Canvas;
 }
 ```

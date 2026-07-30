@@ -9,7 +9,7 @@ further design work — see the roadmap discussion for why viewport regions
 (#4), zoom (#5), and scroll/pan (#6) are deliberately **not** in this file:
 their API shape was an open question in spec.md itself, now resolved by
 [`docs/design/viewport-regions-zoom-scroll.md`](../docs/design/viewport-regions-zoom-scroll.md)
-(two new `Canvas` primitives — `crop`/`blit`/`scaled` — no `Backend` changes).
+(three new `Canvas` primitives — `crop`/`blit`/`scaled` — no `Backend` changes).
 That design intentionally decided against needing kitty-protocol image
 *placement/positioning* (transmitting more than one independently-positioned
 image) at all — see the note after T1 below for the original reasoning this

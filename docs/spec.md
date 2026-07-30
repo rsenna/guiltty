@@ -110,5 +110,7 @@ v0 is done when, using only the kitty backend:
 
 - Exact MSRV (minimum supported Rust version) — default to "latest stable" until a reason to pin arises.
 - Whether v0's example should be a specific demo app (e.g., a file browser with image thumbnails) or several small feature-focused examples — to be decided in the Plan phase.
-- Exact shape of the zoom/scroll API (e.g., viewport offset + zoom factor vs. a camera abstraction) — to be resolved during planning/implementation, not blocking spec approval.
+- ~~Exact shape of the zoom/scroll API (e.g., viewport offset + zoom factor vs. a camera abstraction) — to be resolved during planning/implementation, not blocking spec approval.~~
+  Resolved: see [`docs/design/viewport-regions-zoom-scroll.md`](design/viewport-regions-zoom-scroll.md)
+  (`Canvas::crop`/`blit`/`scaled`, no `Backend` changes).
 - Whether/when to publish to crates.io — out of scope for v0 planning.

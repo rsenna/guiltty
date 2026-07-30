@@ -37,9 +37,10 @@ Its goals include:
       Code-complete but unverified: no kitty-compatible terminal has been available in this environment.<br/>
       See [`docs/spec-kitty-e2e.md`](docs/spec-kitty-e2e.md) for the planned automated + manual verification work.
 - [ ] Carving a terminal into multiple independent viewports. **[NOT STARTED]**<br/>
-      Deferred pending a design pass (`docs/design/viewport-regions-zoom-scroll.md`, not yet written).
+      Design complete — see [`docs/design/viewport-regions-zoom-scroll.md`](docs/design/viewport-regions-zoom-scroll.md) —
+      but not yet broken into tasks or implemented.
 - [ ] Zooming and panning across large canvases. **[NOT STARTED]**<br/>
-      Same reason as above.
+      Same design, same status.
 
 What exists today:
 
