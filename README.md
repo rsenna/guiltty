@@ -1,5 +1,7 @@
 # guiltty
 
+<img src="./docs/guiltty-mascot.jpg" width="600" alt="Kitty Kay feeling guiltty"/>
+
 A Rust library for drawing real, pixel-level 2D graphics into a terminal, using the
 [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) as its first
 backend.
