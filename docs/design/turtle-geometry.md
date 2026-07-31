@@ -38,12 +38,16 @@ impl Turtle {
     pub fn set_pen_color(&mut self, color: Color) -> &mut Self;
 
     // --- movement (delegates straight to the wrapped Sprite, then draws if pen is down) ---
-    pub fn forward(&mut self, canvas: &mut Canvas, distance: f32) -> &mut Self;
-    pub fn backward(&mut self, canvas: &mut Canvas, distance: f32) -> &mut Self;
+    // Drawing moves return Result, not `&mut Self`: `clear_footprint` can now
+    // fail (see companion doc's "Footprint staleness"), and a failed move must
+    // not silently continue as if it had drawn. `?`-chaining replaces
+    // method-chaining for these three.
+    pub fn forward(&mut self, canvas: &mut Canvas, distance: f32) -> Result<&mut Self, StaleFootprint>;
+    pub fn backward(&mut self, canvas: &mut Canvas, distance: f32) -> Result<&mut Self, StaleFootprint>;
     pub fn turn(&mut self, degrees: f32) -> &mut Self;   // no line to draw — heading-only, no canvas needed
     pub fn left(&mut self, degrees: f32) -> &mut Self;
     pub fn right(&mut self, degrees: f32) -> &mut Self;
-    pub fn goto(&mut self, canvas: &mut Canvas, position: Point) -> &mut Self; // absolute move + draw
+    pub fn goto(&mut self, canvas: &mut Canvas, position: Point) -> Result<&mut Self, StaleFootprint>; // absolute move + draw
 
     pub fn sprite(&self) -> &Sprite;       // escape hatch to the underlying Sprite
     pub fn sprite_mut(&mut self) -> &mut Sprite;
@@ -66,7 +70,22 @@ Fill::solid(pen_color))` onto the now-cleared canvas, (5)
 `sprite.place(canvas)` — captures the footprint *after* the trail segment is
 already there, then blits the icon on top. The icon ends up sitting over the
 trail's endpoint each move (cosmetic — trail-under-icon, not the other way
-around — acceptable and easy to flip later if wanted). `turn`/`left`/`right`
+around — acceptable and easy to flip later if wanted).
+
+Step (1) can now fail: if `clear_footprint` returns `Err(StaleFootprint)`
+— the canvas changed since this sprite's last `place`, e.g. a *different*
+`Turtle`'s pen-down move drew through this one's current footprint —
+`forward`/`backward`/`goto` propagate the error instead of drawing, leaving
+this turtle's position, the sprite's `last_draw`, and the canvas all
+untouched (see [`sprite-crate-extraction.md`](sprite-crate-extraction.md)'s
+"Footprint staleness"). This is what makes it safe for two turtles' trails
+to cross: whichever one next tries to redraw over the intersection gets a
+caught error on that one move — the caller decides whether to retry, skip
+the clear, or surface it — instead of silently erasing the other turtle's
+trail. It does not automatically preserve both trails through the overlap;
+it only guarantees the conflict can't pass silently.
+
+`turn`/`left`/`right`
 only change heading — no line to draw, so unlike the movement methods they
 don't need a `&mut Canvas` argument at all.
 
@@ -108,9 +127,11 @@ both `guiltty-sprite`, for `Sprite`/`Bitmap`, **and directly on
 above uses all of these directly, so this isn't a `guiltty-sprite`-only
 dependency), implement `Turtle` per the sketch above with unit tests
 (pen-up not drawing, pen-color changes affecting only subsequent segments,
-`turn` not requiring a canvas, and a regression test asserting a multi-move
-trail has **no gap** at any previous turtle position — the exact bug this
-design's `clear_footprint`/`place` ordering exists to prevent), and a small
-example under `examples/`
+`turn` not requiring a canvas, a regression test asserting a single
+turtle's multi-move trail has **no gap** at any previous position — the
+exact bug this design's `clear_footprint`/`place` ordering exists to
+prevent — and a two-turtle test where B's footprint overlaps a segment A
+draws afterward: B's next `forward` returns `Err(StaleFootprint)` instead
+of erasing A's trail), and a small example under `examples/`
 tracing a recognizable shape (e.g. a star or spiral) to double as the
 manual visual check.

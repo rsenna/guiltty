@@ -69,12 +69,15 @@ there anymore (Rust's orphan rule), and the new crate has no access to
 
 Resolution, in two parts:
 
-- `Canvas` gains one new public accessor, `pub fn id(&self) -> u64`
+- `Canvas` gains two new public accessors: `pub fn id(&self) -> u64`
   (or an opaque `CanvasId` newtype if we'd rather not expose the raw
   `u64`) — enough for `guiltty-sprite` to replicate the
-  wrong-canvas-guard without needing direct field access. This part of the
-  change is additive and non-breaking: `guiltty-core`'s existing public API
-  is unchanged, only extended.
+  wrong-canvas-guard without needing direct field access — and `pub fn
+  version(&self) -> u64`, a monotonic counter bumped on every
+  pixel-mutating call (`set_pixel`, `draw_shape`, a sprite's `place`, …),
+  used below to detect a stale footprint. Both are additive and
+  non-breaking: `guiltty-core`'s existing public API is unchanged, only
+  extended.
 - The draw method itself moves to `guiltty-sprite` as `sprite.draw_on(&mut
   canvas)` (a method on `Sprite`, since `Canvas` can no longer host an
   inherent method for a foreign type), reimplemented entirely against
@@ -146,7 +149,7 @@ impl Sprite {
     // sprite's old footprint and placing it at the new one -- seeing/using only
     // `draw_on` can't do this, since it bundles restore+capture+blit as one atomic
     // step with nothing else able to run in the middle.
-    pub fn clear_footprint(&mut self, canvas: &mut Canvas); // restore-only; no-op if never drawn (or last drawn on a different Canvas)
+    pub fn clear_footprint(&mut self, canvas: &mut Canvas) -> Result<(), StaleFootprint>; // restore-only; Ok(()) no-op if never drawn; Err(StaleFootprint) — canvas left untouched — if drawn on a different Canvas or if the canvas has changed since this footprint was captured (see "Footprint staleness" below)
     pub fn place(&mut self, canvas: &mut Canvas);           // capture-new-footprint-then-blit only, no restore
 }
 ```
@@ -163,6 +166,47 @@ never silently discarded call-by-call. `move_to` is the one place that
 losing any prior fractional part) rather than accumulating into it, since an
 absolute jump has no meaningful "fractional carry-over" from wherever the
 sprite was before.
+
+## Footprint staleness: version-stamped, fail-fast
+
+`clear_footprint` restores a snapshot captured at `place` time. If anything
+else draws into that same region between the capture and the restore — a
+second `clear_footprint` call replaying an already-consumed snapshot, or
+(in `guiltty-turtle`) a *different* sprite's trail drawn through this
+sprite's footprint before it's cleared — a naive restore silently blits the
+old snapshot back, discarding whatever drew there in the meantime. This is
+a pixel-level hazard, not a "whose trail is it" one: the canvas has no
+notion of ownership, only of what was written and when.
+
+The fix is version-stamping, checked fail-fast rather than avoided by
+restricting when callers are allowed to draw:
+
+```rust
+struct DrawnFootprint {
+    canvas_id: u64,
+    version: u64,   // Canvas::version() at the moment this footprint was captured
+    // .. existing footprint pixel data ..
+}
+
+pub struct StaleFootprint; // canvas.version() has advanced since capture
+```
+
+`Canvas::version()` is a monotonic counter bumped on every pixel-mutating
+call (`set_pixel`, `draw_shape`, a sprite's `place`). `clear_footprint`
+compares its footprint's stored `version` against the canvas's current
+one; on a mismatch it returns `Err(StaleFootprint)` and leaves the canvas
+untouched, instead of restoring pixels that no longer reflect what's
+actually been drawn. `last_draw` is left in place on error (the caller
+decides whether to retry, skip the clear, or propagate the error) and is
+only cleared on a successful restore.
+
+The counter is per-`Canvas`, not per-region: any write anywhere on the
+canvas invalidates every open footprint on it, even ones nowhere near what
+was drawn. That's a deliberate over-approximation — a false-positive
+`StaleFootprint` is a caller-visible error to handle, not silent pixel
+corruption, and per-region tracking would need spatial indexing this
+design doesn't need yet. Revisit only if this proves too conservative in
+practice (e.g. many independent sprites on one large canvas).
 
 ## Non-goals
 
@@ -184,13 +228,18 @@ Two PRs, in order:
 
 1. **Extract `guiltty-sprite`**: new workspace member, move `Sprite`/`Bitmap`
    verbatim (including `Bitmap::from_file`'s `Result<Self, guiltty_core::Error>`
-   signature, unchanged), add `Canvas::id()`, reimplement `draw_on` against
-   `Canvas`'s public API, update `guiltty`'s facade re-exports and any
-   existing sprite-related tests/examples to the new crate and call-site
+   signature, unchanged), add `Canvas::id()` and `Canvas::version()`,
+   reimplement `draw_on`/`clear_footprint`/`place` against `Canvas`'s
+   public API, update `guiltty`'s facade re-exports and any existing
+   sprite-related tests/examples to the new crate and call-site
    (`sprite.draw_on(&mut canvas)` instead of `canvas.draw_sprite(&mut
    sprite)`). No drawing-behavior change, but a breaking public-API change
    as described above — call this out explicitly in the PR description,
-   don't call it "non-breaking."
+   don't call it "non-breaking." Unit tests must cover `clear_footprint`'s
+   stale-detection: calling it twice in a row returns `Err(StaleFootprint)`
+   on the second call, and a write to the canvas between `place` and
+   `clear_footprint` (standing in for another sprite's trail crossing this
+   one's footprint) does too — both leaving the canvas' pixels unchanged.
 2. **Add relative movement**: `heading`/`forward`/`backward`/`turn`/`left`/
    `right` on `Sprite`, with unit tests covering heading after known turn
    sequences, position after known forward/turn sequences (including the
