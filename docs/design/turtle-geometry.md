@@ -50,20 +50,31 @@ impl Turtle {
 }
 ```
 
-Each drawing move (`forward`/`backward`/`goto`) does, in order: (1) record
-the current absolute position as `from`, (2) delegate to the wrapped
-`Sprite`'s own `forward`/`backward`/`move_to` to update its position, (3) if
+Each drawing move (`forward`/`backward`/`goto`) uses `guiltty-sprite`'s
+`clear_footprint`/`place` split (not the bundled `draw_on`) specifically to
+get a trail line drawn *between* the two — using `draw_on` here would
+restore the sprite's *old* footprint **after** the trail line already
+drew into it, erasing exactly the pixels where the line started, on every
+single move. In order: (1) `sprite.clear_footprint(canvas)` — reveals
+whatever the canvas actually showed before the icon was last placed there
+(which includes any trail segment drawn on a prior move, since that segment
+was drawn *before* that prior move's own `place` call captured it), (2)
+record the current position as `from`, (3) delegate to the wrapped
+`Sprite`'s own `forward`/`backward`/`move_to` to update its position, (4) if
 `pen_down`, draw `canvas.draw_shape(&Shape::line(from, sprite.position()),
-Fill::solid(pen_color))`, (4) draw the sprite's bitmap on top via
-`sprite.draw_on(canvas)` so the turtle's own icon still renders
-non-destructively over the trail it just drew, using the same
-save/restore-under mechanism `Sprite` already has. `turn`/`left`/`right`
+Fill::solid(pen_color))` onto the now-cleared canvas, (5)
+`sprite.place(canvas)` — captures the footprint *after* the trail segment is
+already there, then blits the icon on top. The icon ends up sitting over the
+trail's endpoint each move (cosmetic — trail-under-icon, not the other way
+around — acceptable and easy to flip later if wanted). `turn`/`left`/`right`
 only change heading — no line to draw, so unlike the movement methods they
 don't need a `&mut Canvas` argument at all.
 
 This is a strict subset of what the original standalone sketch proposed:
 no separate position/heading fields (the wrapped `Sprite` already has them),
 no separate rounding-drift handling (already solved in `guiltty-sprite`).
+It does, however, depend on `guiltty-sprite` exposing the `clear_footprint`/
+`place` split alongside `draw_on` — see that doc's API sketch.
 
 ## Non-goals
 
@@ -92,8 +103,14 @@ no separate rounding-drift handling (already solved in `guiltty-sprite`).
 
 Once [`sprite-crate-extraction.md`](sprite-crate-extraction.md)'s two PRs
 land: scaffold `crates/guiltty-turtle` (new workspace member, depending on
-`guiltty-sprite`), implement `Turtle` per the sketch above with unit tests
+both `guiltty-sprite`, for `Sprite`/`Bitmap`, **and directly on
+`guiltty-core`**, for `Canvas`/`Color`/`Point`/`Shape`/`Fill` — the sketch
+above uses all of these directly, so this isn't a `guiltty-sprite`-only
+dependency), implement `Turtle` per the sketch above with unit tests
 (pen-up not drawing, pen-color changes affecting only subsequent segments,
-`turn` not requiring a canvas), and a small example under `examples/`
+`turn` not requiring a canvas, and a regression test asserting a multi-move
+trail has **no gap** at any previous turtle position — the exact bug this
+design's `clear_footprint`/`place` ordering exists to prevent), and a small
+example under `examples/`
 tracing a recognizable shape (e.g. a star or spiral) to double as the
 manual visual check.
