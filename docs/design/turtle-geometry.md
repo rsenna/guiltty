@@ -51,6 +51,12 @@ impl Turtle {
 
     pub fn sprite(&self) -> &Sprite;       // escape hatch to the underlying Sprite
     pub fn sprite_mut(&mut self) -> &mut Sprite;
+
+    // Recovery from Err(StaleFootprint) (see below): discards the sprite's
+    // stale footprint and re-places it at its current position -- no trail
+    // segment is drawn (there's no known-good `from` pixel state to draw
+    // over). After `resync`, `forward`/`backward`/`goto` work normally again.
+    pub fn resync(&mut self, canvas: &mut Canvas) -> &mut Self;
 }
 ```
 
@@ -73,17 +79,26 @@ trail's endpoint each move (cosmetic — trail-under-icon, not the other way
 around — acceptable and easy to flip later if wanted).
 
 Step (1) can now fail: if `clear_footprint` returns `Err(StaleFootprint)`
-— the canvas changed since this sprite's last `place`, e.g. a *different*
-`Turtle`'s pen-down move drew through this one's current footprint —
-`forward`/`backward`/`goto` propagate the error instead of drawing, leaving
-this turtle's position, the sprite's `last_draw`, and the canvas all
-untouched (see [`sprite-crate-extraction.md`](sprite-crate-extraction.md)'s
-"Footprint staleness"). This is what makes it safe for two turtles' trails
-to cross: whichever one next tries to redraw over the intersection gets a
-caught error on that one move — the caller decides whether to retry, skip
-the clear, or surface it — instead of silently erasing the other turtle's
+— *another* sprite's write actually overlapped this sprite's footprint
+since its last `place`, e.g. a *different* `Turtle`'s pen-down move drew
+through this one's current footprint (disjoint turtles never trigger this
+— see the companion doc's region-scoping) — `forward`/`backward`/`goto`
+propagate the error instead of drawing, leaving this turtle's position, the
+sprite's `last_draw`, and the canvas all untouched (see
+[`sprite-crate-extraction.md`](sprite-crate-extraction.md)'s "Footprint
+staleness"). This is what makes it safe for two turtles' trails to cross:
+whichever one next tries to redraw over the intersection gets a caught
+error on that one move instead of silently erasing the other turtle's
 trail. It does not automatically preserve both trails through the overlap;
 it only guarantees the conflict can't pass silently.
+
+Retrying the same move after `Err(StaleFootprint)` cannot succeed on its
+own — the underlying version only increases, so the mismatch is permanent
+for that footprint. The caller must call `resync(canvas)` first (discards
+the stale footprint, re-places the icon with no trail segment for that
+recovery step), then retry the move normally. A turtle that never calls
+`resync` after a stale error stays stuck: every subsequent move on it
+repeats the same failed `clear_footprint` check.
 
 `turn`/`left`/`right`
 only change heading — no line to draw, so unlike the movement methods they
@@ -131,8 +146,11 @@ drawing, pen-color changes affecting only subsequent segments,
 `turn` not requiring a canvas, a regression test asserting a single
 turtle's multi-move trail has **no gap** at any previous position — the
 exact bug this design's `clear_footprint`/`place` ordering exists to
-prevent — and a two-turtle test where B's footprint overlaps a segment A
+prevent — a two-turtle test where B's footprint overlaps a segment A
 draws afterward: B's next `forward` returns `Err(StaleFootprint)` instead
-of erasing A's trail), and a small example under `examples/`
+of erasing A's trail, a test that two turtles moving in genuinely disjoint
+areas never see `Err(StaleFootprint)` from each other, and a recovery test
+that `resync` followed by a normal move succeeds after a prior
+`StaleFootprint`), and a small example under `examples/`
 tracing a recognizable shape (e.g. a star or spiral) to double as the
 manual visual check.
