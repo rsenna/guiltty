@@ -235,7 +235,13 @@ Two PRs, in order:
    (`sprite.draw_on(&mut canvas)` instead of `canvas.draw_sprite(&mut
    sprite)`). No drawing-behavior change, but a breaking public-API change
    as described above — call this out explicitly in the PR description,
-   don't call it "non-breaking." Unit tests must cover `clear_footprint`'s
+   don't call it "non-breaking." "Any existing sprite-related tests" is
+   concretely: `Canvas::draw_sprite`'s current transparency, clipping,
+   same-canvas-movement, and cross-canvas-drawing tests move over to
+   `Sprite::draw_on` with their assertions preserved, plus a new test that
+   `draw_on`/`clear_footprint` is a no-op — not a panic, not a draw onto
+   the wrong pixels — when called with a `Canvas` whose `id()` doesn't
+   match the footprint's captured one. Also cover `clear_footprint`'s
    stale-detection: calling it twice in a row returns `Err(StaleFootprint)`
    on the second call, and a write to the canvas between `place` and
    `clear_footprint` (standing in for another sprite's trail crossing this

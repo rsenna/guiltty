@@ -126,7 +126,8 @@ both `guiltty-sprite`, for `Sprite`/`Bitmap`, **and directly on
 `guiltty-core`**, for `Canvas`/`Color`/`Point`/`Shape`/`Fill` — the sketch
 above uses all of these directly, so this isn't a `guiltty-sprite`-only
 dependency), implement `Turtle` per the sketch above with unit tests
-(pen-up not drawing, pen-color changes affecting only subsequent segments,
+(pen-down drawing a line segment on the move that triggered it, pen-up not
+drawing, pen-color changes affecting only subsequent segments,
 `turn` not requiring a canvas, a regression test asserting a single
 turtle's multi-move trail has **no gap** at any previous position — the
 exact bug this design's `clear_footprint`/`place` ordering exists to
