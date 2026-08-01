@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/guiltty-core",
+    "crates/guiltty-sprite",
     "crates/guiltty-kitty",
     "crates/guiltty",
     "examples",

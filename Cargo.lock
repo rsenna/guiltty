@@ -136,14 +136,12 @@ version = "0.0.0"
 dependencies = [
  "guiltty-core",
  "guiltty-kitty",
+ "guiltty-sprite",
 ]
 
 [[package]]
 name = "guiltty-core"
 version = "0.0.0"
-dependencies = [
- "image",
-]
 
 [[package]]
 name = "guiltty-examples"
@@ -159,6 +157,14 @@ dependencies = [
  "base64",
  "guiltty-core",
  "kittage",
+]
+
+[[package]]
+name = "guiltty-sprite"
+version = "0.0.0"
+dependencies = [
+ "guiltty-core",
+ "image",
 ]
 
 [[package]]

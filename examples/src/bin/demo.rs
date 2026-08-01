@@ -67,7 +67,9 @@ fn main() {
     // now that Bitmap::from_file exists.
     let bitmap = Bitmap::from_file(SPRITE_PNG).expect("bundled sprite asset should load");
     let mut sprite = Sprite::new(bitmap, Point::new(10, 140));
-    canvas.draw_sprite(&mut sprite);
+    sprite
+        .draw_on(&mut canvas)
+        .expect("first draw always succeeds");
 
     let mut backend = KittyBackend::new();
     backend
@@ -78,7 +80,9 @@ fn main() {
     // in-memory move wouldn't actually prove movement or background preservation, so
     // both frames are required (see this task's own acceptance criteria).
     sprite.move_to(Point::new(370, 140));
-    canvas.draw_sprite(&mut sprite);
+    sprite
+        .draw_on(&mut canvas)
+        .expect("nothing else wrote into the footprint in between");
     backend
         .present(&canvas)
         .expect("second present should succeed");
