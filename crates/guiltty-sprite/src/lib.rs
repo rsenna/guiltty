@@ -223,20 +223,18 @@ impl Sprite {
     ///   `docs/design/sprite-crate-extraction.md`.
     /// - `Ok(())`, restored, otherwise.
     pub fn clear_footprint(&mut self, canvas: &mut Canvas) -> Result<(), StaleFootprint> {
-        let Some(footprint) = self.last_draw.as_ref() else {
+        let Some(footprint) = self.last_draw.take() else {
             return Ok(());
         };
         if footprint.canvas_id != canvas.id() {
-            self.last_draw = None;
+            // last_draw is already None (taken above) -- correct final state for a
+            // footprint that has nothing to do with this canvas; nothing to restore.
             return Ok(());
         }
         if canvas.region_version(footprint.rect) != footprint.version {
+            self.last_draw = Some(footprint); // error path must leave last_draw untouched
             return Err(StaleFootprint);
         }
-        let footprint = self
-            .last_draw
-            .take()
-            .expect("checked Some above, and canvas_id/region_version both matched");
         Self::restore_footprint(canvas, &footprint);
         Ok(())
     }
@@ -269,7 +267,11 @@ impl Sprite {
         for y in y_lo..y_hi {
             for x in x_lo..x_hi {
                 let (cx, cy) = (x as u32, y as u32);
-                saved.push(canvas.pixel(cx, cy).unwrap_or_default());
+                saved.push(
+                    canvas
+                        .pixel(cx, cy)
+                        .expect("canvas pixel out of bounds in Sprite::place"),
+                );
                 let (bx, by) = ((x - px) as u32, (y - py) as u32);
                 if let Some(color) = self.bitmap.pixel(bx, by) {
                     if color.a != 0 {

@@ -160,8 +160,20 @@ impl Canvas {
         let len = (width as usize)
             .checked_mul(height as usize)
             .expect("Canvas dimensions too large: width * height overflows usize");
-        let tiles_x = width.div_ceil(TILE_SIZE).max(1);
-        let tiles_y = height.div_ceil(TILE_SIZE).max(1);
+        // A zero-width or zero-height canvas has no pixels and needs no tiles either --
+        // forcing at least one tile per axis (e.g. via `.max(1)`) would allocate a huge
+        // `tile_versions` buffer for a canvas like `Canvas::new(0, u32::MAX)` despite it
+        // holding zero actual pixels.
+        let tiles_x = if width == 0 {
+            0
+        } else {
+            width.div_ceil(TILE_SIZE)
+        };
+        let tiles_y = if height == 0 {
+            0
+        } else {
+            height.div_ceil(TILE_SIZE)
+        };
         Self {
             id: NEXT_CANVAS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             width,
@@ -209,9 +221,21 @@ impl Canvas {
     /// Sets the color at `(x, y)`. Silently ignores out-of-bounds coordinates — there's
     /// nothing a caller needs recover from, so this isn't a `Result`.
     pub fn set_pixel(&mut self, x: u32, y: u32, color: Color) {
+        self.touch_pixel(x, y);
+        self.set_pixel_raw(x, y, color);
+    }
+
+    /// Writes `color` at `(x, y)` without touching the region-version grid. Used
+    /// internally by this crate's own per-pixel shape/text-drawing helpers
+    /// (`stroke_line`, `fill_*`, `draw_glyph`), which are always invoked from a
+    /// `draw_shape`/`draw_text` call that already touched its whole bounding region up
+    /// front (see `shape_bbox`) -- touching per-pixel on top of that would redundantly
+    /// recompute tile indices and bump `next_version` once per pixel instead of once
+    /// per draw call. External callers needing the region-version side effect (e.g.
+    /// `guiltty-sprite`'s blit/restore) go through the public [`Canvas::set_pixel`].
+    fn set_pixel_raw(&mut self, x: u32, y: u32, color: Color) {
         if let Some(i) = self.index(x, y) {
             self.pixels[i] = color;
-            self.touch_region(Rect::new(x as i32, y as i32, 1, 1));
         }
     }
 
@@ -262,6 +286,22 @@ impl Canvas {
                 self.tile_versions[(ty * self.tiles_x + tx) as usize] = version;
             }
         }
+    }
+
+    /// Bumps the tile containing pixel `(x, y)` to a fresh version -- the single-pixel
+    /// equivalent of `touch_region`, computed directly from `u32` coordinates rather
+    /// than by building a `Rect` from them: `Rect`'s fields are `i32`, so a coordinate
+    /// past `i32::MAX` (which a large enough `Canvas` can have even though `Rect` can't
+    /// represent it) would silently wrap negative and touch the wrong tile, or none. A
+    /// no-op if `(x, y)` is out of bounds.
+    fn touch_pixel(&mut self, x: u32, y: u32) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        self.next_version += 1;
+        let version = self.next_version;
+        let (tx, ty) = (x / TILE_SIZE, y / TILE_SIZE);
+        self.tile_versions[(ty * self.tiles_x + tx) as usize] = version;
     }
 
     /// Clips `region` to this canvas's bounds (in `i64`, mirroring the rest of this
@@ -323,16 +363,19 @@ impl Canvas {
                 )
             }
             Shape::Path { points, .. } => {
-                if points.is_empty() {
-                    (0, 0, 0, 0)
-                } else {
-                    (
-                        points.iter().map(|p| p.x as i64).min().unwrap(),
-                        points.iter().map(|p| p.y as i64).min().unwrap(),
-                        points.iter().map(|p| p.x as i64).max().unwrap() + 1,
-                        points.iter().map(|p| p.y as i64).max().unwrap() + 1,
-                    )
+                let Some(first) = points.first() else {
+                    return Self::rect_from_i64_bounds(0, 0, 0, 0);
+                };
+                let (mut x_lo, mut y_lo) = (first.x as i64, first.y as i64);
+                let (mut x_hi, mut y_hi) = (x_lo, y_lo);
+                for p in &points[1..] {
+                    let (x, y) = (p.x as i64, p.y as i64);
+                    x_lo = x_lo.min(x);
+                    y_lo = y_lo.min(y);
+                    x_hi = x_hi.max(x);
+                    y_hi = y_hi.max(y);
                 }
+                (x_lo, y_lo, x_hi + 1, y_hi + 1)
             }
         };
         Self::rect_from_i64_bounds(x_lo, y_lo, x_hi, y_hi)
@@ -380,13 +423,19 @@ impl Canvas {
         let origin_y = origin.y as i64;
         let mut cursor_x = origin.x as i64;
 
-        let text_width = advance * text.chars().count() as i64;
-        let text_height = font::GLYPH_HEIGHT as i64 * scale;
+        // Saturating, not plain, arithmetic: this bounding rect is only ever fed to
+        // touch_region (an approximate, conservative tile-touch input -- see
+        // rect_from_i64_bounds), never used to actually address pixels, so it's fine
+        // (and preferable) for a pathological scale/text-length combination to saturate
+        // to i64::MAX rather than overflow.
+        let char_count = i64::try_from(text.chars().count()).unwrap_or(i64::MAX);
+        let text_width = advance.saturating_mul(char_count);
+        let text_height = (font::GLYPH_HEIGHT as i64).saturating_mul(scale);
         self.touch_region(Self::rect_from_i64_bounds(
             origin.x as i64,
             origin_y,
-            origin.x as i64 + text_width,
-            origin_y + text_height,
+            (origin.x as i64).saturating_add(text_width),
+            origin_y.saturating_add(text_height),
         ));
 
         for ch in text.chars() {
@@ -660,7 +709,7 @@ impl Canvas {
         let mut err = dx + dy;
         loop {
             if x0 >= 0 && y0 >= 0 {
-                self.set_pixel(x0 as u32, y0 as u32, color);
+                self.set_pixel_raw(x0 as u32, y0 as u32, color);
             }
             if x0 == x1 && y0 == y1 {
                 break;
@@ -706,7 +755,7 @@ impl Canvas {
     fn fill_clipped_rect(&mut self, x_lo: i64, x_hi: i64, y_lo: i64, y_hi: i64, color: Color) {
         for y in y_lo..y_hi {
             for x in x_lo..x_hi {
-                self.set_pixel(x as u32, y as u32, color);
+                self.set_pixel_raw(x as u32, y as u32, color);
             }
         }
     }
@@ -738,7 +787,7 @@ impl Canvas {
             for x in x_lo..=x_hi {
                 let dxr = (x - cx) as f64 / rxf;
                 if dxr * dxr + dyr * dyr <= 1.0 {
-                    self.set_pixel(x as u32, y as u32, color);
+                    self.set_pixel_raw(x as u32, y as u32, color);
                 }
             }
         }
@@ -759,7 +808,7 @@ impl Canvas {
         for y in min_y..=max_y {
             for x in min_x..=max_x {
                 if point_in_triangle(x, y, a, b, c) {
-                    self.set_pixel(x as u32, y as u32, color);
+                    self.set_pixel_raw(x as u32, y as u32, color);
                 }
             }
         }
@@ -830,7 +879,7 @@ impl Canvas {
                 let x_lo = ((pair[0] - 0.5).ceil() as i64).max(0);
                 let x_hi = ((pair[1] - 0.5).ceil() as i64).min(canvas_w);
                 for x in x_lo..x_hi {
-                    self.set_pixel(x as u32, y as u32, color);
+                    self.set_pixel_raw(x as u32, y as u32, color);
                 }
             }
         }
@@ -951,6 +1000,17 @@ mod tests {
                 height: 50
             }
         );
+    }
+
+    #[test]
+    fn canvas_new_zero_width_does_not_allocate_a_huge_tile_grid() {
+        // Regression: forcing tile counts to at least 1 per axis (`.max(1)`) made a
+        // zero-width canvas with a huge height allocate ~134M tile-version counters
+        // despite having zero actual pixels. This must return promptly with no
+        // allocation anywhere near that size.
+        let c = Canvas::new(0, u32::MAX);
+        assert_eq!((c.width(), c.height()), (0, u32::MAX));
+        assert_eq!(c.pixel(0, 0), None); // no pixels exist at all
     }
 
     #[test]
