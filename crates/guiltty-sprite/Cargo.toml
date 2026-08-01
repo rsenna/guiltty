@@ -1,5 +1,5 @@
 [package]
-name = "guiltty"
+name = "guiltty-sprite"
 version = "0.0.0"
 publish = false
 edition.workspace = true
@@ -7,12 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "guiltty: pixel-level 2D graphics in the terminal via the kitty graphics protocol"
+description = "Movable sprites (Bitmap/Sprite) drawn onto a guiltty-core Canvas"
 
 [lints]
 workspace = true
 
 [dependencies]
 guiltty-core = { path = "../guiltty-core", version = "0.0.0" }
-guiltty-sprite = { path = "../guiltty-sprite", version = "0.0.0" }
-guiltty-kitty = { path = "../guiltty-kitty", version = "0.0.0" }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }

@@ -7,10 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Backend-agnostic canvas, shapes, text, sprites, regions, and zoom/scroll logic for guiltty"
+description = "Backend-agnostic canvas, shapes, text, and regions/zoom/scroll logic for guiltty"
 
 [lints]
 workspace = true
-
-[dependencies]
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }

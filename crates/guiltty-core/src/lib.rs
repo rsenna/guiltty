@@ -1,7 +1,7 @@
 //! Backend-agnostic core primitives (`Color`, `Point`, `Rect`) and the [`Backend`] trait that
-//! rendering backends (e.g. `guiltty-kitty`) implement. `Canvas` supports shape drawing, text,
-//! and movable sprites (see [`Canvas::draw_sprite`]); region/zoom/scroll logic described in the
-//! spec is not implemented yet.
+//! rendering backends (e.g. `guiltty-kitty`) implement. `Canvas` supports shape drawing and
+//! text; movable sprites live in the separate `guiltty-sprite` crate, built entirely on this
+//! one's public API. Region/zoom/scroll logic described in the spec is not implemented yet.
 
 /// RGBA8 color, used throughout for canvas pixels, shape fills, and sprite bitmaps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -99,20 +99,37 @@ pub trait Backend {
 /// instance (including ones produced by `Canvas::clone()`) — see `Canvas::id`.
 static NEXT_CANVAS_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Side length, in pixels, of one tile in `Canvas`'s region-version grid (see
+/// `Canvas::region_version`). An implementation detail, not public API.
+const TILE_SIZE: u32 = 32;
+
 /// A pixel buffer that can be drawn into. RGBA8, origin top-left, row-major.
 #[derive(Debug)]
 pub struct Canvas {
     /// Distinguishes this canvas from every other one, including clones of itself, so a
-    /// `Sprite`'s saved-under footprint (see [`DrawnFootprint`]) is never restored onto
-    /// the wrong canvas.
+    /// sprite's saved-under footprint (see the `guiltty-sprite` crate) is never restored
+    /// onto the wrong canvas.
     id: u64,
     width: u32,
     height: u32,
     pixels: Vec<Color>,
+    /// Tile grid backing `region_version`: one counter per `TILE_SIZE`x`TILE_SIZE` tile,
+    /// stamped with `next_version` whenever a pixel-mutating call touches that tile.
+    tiles_x: u32,
+    tiles_y: u32,
+    tile_versions: Vec<u64>,
+    /// Bumped once per pixel-mutating call, then stamped onto every tile that call's
+    /// bounding region overlaps. Never reset except by `Canvas::new`/`Canvas::clone`, so
+    /// `region_version` results are only ever comparable within one `Canvas` instance's
+    /// lifetime (matching `id`'s per-instance scoping).
+    next_version: u64,
 }
 
 /// Manually implemented (rather than `#[derive(Clone)]`) so a cloned canvas gets its own
-/// fresh `id` instead of inheriting the original's — see the `id` field's doc comment.
+/// fresh `id` instead of inheriting the original's — see the `id` field's doc comment. The
+/// version-tracking fields reset fresh too: a clone's `id` won't match any footprint
+/// captured from the original, so the original's version history has nothing left to
+/// stay comparable with.
 impl Clone for Canvas {
     fn clone(&self) -> Self {
         Self {
@@ -120,6 +137,10 @@ impl Clone for Canvas {
             width: self.width,
             height: self.height,
             pixels: self.pixels.clone(),
+            tiles_x: self.tiles_x,
+            tiles_y: self.tiles_y,
+            tile_versions: vec![0; self.tile_versions.len()],
+            next_version: 0,
         }
     }
 }
@@ -139,12 +160,37 @@ impl Canvas {
         let len = (width as usize)
             .checked_mul(height as usize)
             .expect("Canvas dimensions too large: width * height overflows usize");
+        // A zero-width or zero-height canvas has no pixels and needs no tiles either --
+        // forcing at least one tile per axis (e.g. via `.max(1)`) would allocate a huge
+        // `tile_versions` buffer for a canvas like `Canvas::new(0, u32::MAX)` despite it
+        // holding zero actual pixels.
+        let tiles_x = if width == 0 {
+            0
+        } else {
+            width.div_ceil(TILE_SIZE)
+        };
+        let tiles_y = if height == 0 {
+            0
+        } else {
+            height.div_ceil(TILE_SIZE)
+        };
         Self {
             id: NEXT_CANVAS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             width,
             height,
             pixels: vec![Color::default(); len],
+            tiles_x,
+            tiles_y,
+            tile_versions: vec![0; (tiles_x as usize) * (tiles_y as usize)],
+            next_version: 0,
         }
+    }
+
+    /// Uniquely identifies this `Canvas` instance (including across clones -- see
+    /// [`Canvas::clone`]). Used by `guiltty-sprite` to guard against restoring a
+    /// sprite's saved footprint onto the wrong canvas.
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Canvas width in pixels.
@@ -175,6 +221,19 @@ impl Canvas {
     /// Sets the color at `(x, y)`. Silently ignores out-of-bounds coordinates — there's
     /// nothing a caller needs recover from, so this isn't a `Result`.
     pub fn set_pixel(&mut self, x: u32, y: u32, color: Color) {
+        self.touch_pixel(x, y);
+        self.set_pixel_raw(x, y, color);
+    }
+
+    /// Writes `color` at `(x, y)` without touching the region-version grid. Used
+    /// internally by this crate's own per-pixel shape/text-drawing helpers
+    /// (`stroke_line`, `fill_*`, `draw_glyph`), which are always invoked from a
+    /// `draw_shape`/`draw_text` call that already touched its whole bounding region up
+    /// front (see `shape_bbox`) -- touching per-pixel on top of that would redundantly
+    /// recompute tile indices and bump `next_version` once per pixel instead of once
+    /// per draw call. External callers needing the region-version side effect (e.g.
+    /// `guiltty-sprite`'s blit/restore) go through the public [`Canvas::set_pixel`].
+    fn set_pixel_raw(&mut self, x: u32, y: u32, color: Color) {
         if let Some(i) = self.index(x, y) {
             self.pixels[i] = color;
         }
@@ -188,6 +247,161 @@ impl Canvas {
             bytes.extend_from_slice(&[color.r, color.g, color.b, color.a]);
         }
         bytes
+    }
+
+    /// Returns the most recent write-version among the tiles `region` overlaps -- i.e.
+    /// "the most recent pixel-mutating call that could have touched any pixel in here."
+    /// `0` if `region` touches no tile that's ever been written to (including a region
+    /// entirely off-canvas). Used by `guiltty-sprite` to detect a stale footprint: a
+    /// captured `region_version` that no longer matches a fresh call means something
+    /// wrote into that region since capture. See `docs/design/sprite-crate-extraction.md`'s
+    /// "Footprint staleness".
+    pub fn region_version(&self, region: Rect) -> u64 {
+        let Some((tx_lo, tx_hi, ty_lo, ty_hi)) = self.tile_range(region) else {
+            return 0;
+        };
+        let mut max_version = 0u64;
+        for ty in ty_lo..=ty_hi {
+            for tx in tx_lo..=tx_hi {
+                max_version =
+                    max_version.max(self.tile_versions[(ty * self.tiles_x + tx) as usize]);
+            }
+        }
+        max_version
+    }
+
+    /// Bumps every tile `region` overlaps to a fresh version. Called from every
+    /// pixel-mutating method (`set_pixel`, `draw_shape`, `draw_text`) with that call's own
+    /// bounding region, so `region_version` can later tell whether anything wrote into a
+    /// given area since some earlier point in time. A no-op if `region` is entirely
+    /// off-canvas.
+    fn touch_region(&mut self, region: Rect) {
+        let Some((tx_lo, tx_hi, ty_lo, ty_hi)) = self.tile_range(region) else {
+            return;
+        };
+        self.next_version += 1;
+        let version = self.next_version;
+        for ty in ty_lo..=ty_hi {
+            for tx in tx_lo..=tx_hi {
+                self.tile_versions[(ty * self.tiles_x + tx) as usize] = version;
+            }
+        }
+    }
+
+    /// Bumps the tile containing pixel `(x, y)` to a fresh version -- the single-pixel
+    /// equivalent of `touch_region`, computed directly from `u32` coordinates rather
+    /// than by building a `Rect` from them: `Rect`'s fields are `i32`, so a coordinate
+    /// past `i32::MAX` (which a large enough `Canvas` can have even though `Rect` can't
+    /// represent it) would silently wrap negative and touch the wrong tile, or none. A
+    /// no-op if `(x, y)` is out of bounds.
+    fn touch_pixel(&mut self, x: u32, y: u32) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        self.next_version += 1;
+        let version = self.next_version;
+        let (tx, ty) = (x / TILE_SIZE, y / TILE_SIZE);
+        self.tile_versions[(ty * self.tiles_x + tx) as usize] = version;
+    }
+
+    /// Clips `region` to this canvas's bounds (in `i64`, mirroring the rest of this
+    /// file's overflow-safe clipping idiom) and converts the result to an inclusive tile
+    /// index range `(tx_lo, tx_hi, ty_lo, ty_hi)`. `None` if the clipped region is empty
+    /// (entirely off-canvas, or zero-sized).
+    fn tile_range(&self, region: Rect) -> Option<(u32, u32, u32, u32)> {
+        let canvas_w = self.width as i64;
+        let canvas_h = self.height as i64;
+        let x_lo = (region.x as i64).max(0);
+        let x_hi = (region.x as i64 + region.width as i64).min(canvas_w);
+        let y_lo = (region.y as i64).max(0);
+        let y_hi = (region.y as i64 + region.height as i64).min(canvas_h);
+        if x_hi <= x_lo || y_hi <= y_lo {
+            return None;
+        }
+        Some((
+            (x_lo as u32) / TILE_SIZE,
+            ((x_hi - 1) as u32) / TILE_SIZE,
+            (y_lo as u32) / TILE_SIZE,
+            ((y_hi - 1) as u32) / TILE_SIZE,
+        ))
+    }
+
+    /// Bounding region of `shape` in canvas coordinate space, for `touch_region` only --
+    /// not used for rendering, so it doesn't need pixel-perfect precision, just to
+    /// contain every pixel the shape's own drawing logic below could touch. Computed in
+    /// `i64` so the extreme coordinates/radii this crate already guards against
+    /// elsewhere (see the `draw_shape_*_does_not_overflow_or_panic` tests) can't overflow
+    /// here either.
+    fn shape_bbox(shape: &Shape) -> Rect {
+        let (x_lo, y_lo, x_hi, y_hi) = match shape {
+            Shape::Line { from, to } => (
+                (from.x as i64).min(to.x as i64),
+                (from.y as i64).min(to.y as i64),
+                (from.x as i64).max(to.x as i64) + 1,
+                (from.y as i64).max(to.y as i64) + 1,
+            ),
+            Shape::Rect {
+                origin,
+                width,
+                height,
+            } => (
+                origin.x as i64,
+                origin.y as i64,
+                origin.x as i64 + *width as i64,
+                origin.y as i64 + *height as i64,
+            ),
+            Shape::Circle { center, radius } => Self::radial_bbox(*center, *radius, *radius),
+            Shape::Ellipse { center, rx, ry } => Self::radial_bbox(*center, *rx, *ry),
+            Shape::Triangle { a, b, c } => {
+                let xs = [a.x as i64, b.x as i64, c.x as i64];
+                let ys = [a.y as i64, b.y as i64, c.y as i64];
+                (
+                    xs.into_iter().min().unwrap(),
+                    ys.into_iter().min().unwrap(),
+                    xs.into_iter().max().unwrap() + 1,
+                    ys.into_iter().max().unwrap() + 1,
+                )
+            }
+            Shape::Path { points, .. } => {
+                let Some(first) = points.first() else {
+                    return Self::rect_from_i64_bounds(0, 0, 0, 0);
+                };
+                let (mut x_lo, mut y_lo) = (first.x as i64, first.y as i64);
+                let (mut x_hi, mut y_hi) = (x_lo, y_lo);
+                for p in &points[1..] {
+                    let (x, y) = (p.x as i64, p.y as i64);
+                    x_lo = x_lo.min(x);
+                    y_lo = y_lo.min(y);
+                    x_hi = x_hi.max(x);
+                    y_hi = y_hi.max(y);
+                }
+                (x_lo, y_lo, x_hi + 1, y_hi + 1)
+            }
+        };
+        Self::rect_from_i64_bounds(x_lo, y_lo, x_hi, y_hi)
+    }
+
+    /// Bounding region of a circle/ellipse (`center` +/- `rx`/`ry`), for `shape_bbox`.
+    fn radial_bbox(center: Point, rx: u32, ry: u32) -> (i64, i64, i64, i64) {
+        (
+            center.x as i64 - rx as i64,
+            center.y as i64 - ry as i64,
+            center.x as i64 + rx as i64 + 1,
+            center.y as i64 + ry as i64 + 1,
+        )
+    }
+
+    /// Builds a `Rect` from `i64` bounds, clamping to `i32`/`u32`-representable ranges
+    /// rather than propagating extreme values into `Rect`'s fields. Only used as an
+    /// approximate `touch_region` input, never for rendering, so this clamping can't
+    /// affect what's actually drawn -- only (conservatively) which tiles get marked
+    /// touched.
+    fn rect_from_i64_bounds(x_lo: i64, y_lo: i64, x_hi: i64, y_hi: i64) -> Rect {
+        let x = x_lo.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+        let y = y_lo.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+        let width = (x_hi - x_lo).clamp(0, u32::MAX as i64) as u32;
+        let height = (y_hi - y_lo).clamp(0, u32::MAX as i64) as u32;
+        Rect::new(x, y, width, height)
     }
 
     /// Draws `text` starting at `origin` (top-left of the first glyph) using `style`.
@@ -208,6 +422,21 @@ impl Canvas {
         let canvas_h = self.height as i64;
         let origin_y = origin.y as i64;
         let mut cursor_x = origin.x as i64;
+
+        // Saturating, not plain, arithmetic: this bounding rect is only ever fed to
+        // touch_region (an approximate, conservative tile-touch input -- see
+        // rect_from_i64_bounds), never used to actually address pixels, so it's fine
+        // (and preferable) for a pathological scale/text-length combination to saturate
+        // to i64::MAX rather than overflow.
+        let char_count = i64::try_from(text.chars().count()).unwrap_or(i64::MAX);
+        let text_width = advance.saturating_mul(char_count);
+        let text_height = (font::GLYPH_HEIGHT as i64).saturating_mul(scale);
+        self.touch_region(Self::rect_from_i64_bounds(
+            origin.x as i64,
+            origin_y,
+            (origin.x as i64).saturating_add(text_width),
+            origin_y.saturating_add(text_height),
+        ));
 
         for ch in text.chars() {
             if cursor_x >= canvas_w {
@@ -286,6 +515,8 @@ impl Default for TextStyle {
 /// non-ASCII) — full font coverage is a follow-up task once real text needs demand it.
 mod font {
     pub const GLYPH_WIDTH: u32 = 3;
+    /// Every glyph is 5 rows tall (see the glyph table below).
+    pub const GLYPH_HEIGHT: u32 = 5;
 
     /// Returns the glyph for `ch` as 5 rows of `GLYPH_WIDTH` characters (`'#'` = lit
     /// pixel, anything else = unlit), or `None` for unsupported characters.
@@ -432,6 +663,7 @@ impl Canvas {
     /// filled solid vs. stroked.
     pub fn draw_shape(&mut self, shape: &Shape, fill: Fill) {
         let color = fill.color();
+        self.touch_region(Self::shape_bbox(shape));
         match shape {
             Shape::Line { from, to } => self.stroke_line(*from, *to, color),
             Shape::Rect {
@@ -477,7 +709,7 @@ impl Canvas {
         let mut err = dx + dy;
         loop {
             if x0 >= 0 && y0 >= 0 {
-                self.set_pixel(x0 as u32, y0 as u32, color);
+                self.set_pixel_raw(x0 as u32, y0 as u32, color);
             }
             if x0 == x1 && y0 == y1 {
                 break;
@@ -523,7 +755,7 @@ impl Canvas {
     fn fill_clipped_rect(&mut self, x_lo: i64, x_hi: i64, y_lo: i64, y_hi: i64, color: Color) {
         for y in y_lo..y_hi {
             for x in x_lo..x_hi {
-                self.set_pixel(x as u32, y as u32, color);
+                self.set_pixel_raw(x as u32, y as u32, color);
             }
         }
     }
@@ -555,7 +787,7 @@ impl Canvas {
             for x in x_lo..=x_hi {
                 let dxr = (x - cx) as f64 / rxf;
                 if dxr * dxr + dyr * dyr <= 1.0 {
-                    self.set_pixel(x as u32, y as u32, color);
+                    self.set_pixel_raw(x as u32, y as u32, color);
                 }
             }
         }
@@ -576,7 +808,7 @@ impl Canvas {
         for y in min_y..=max_y {
             for x in min_x..=max_x {
                 if point_in_triangle(x, y, a, b, c) {
-                    self.set_pixel(x as u32, y as u32, color);
+                    self.set_pixel_raw(x as u32, y as u32, color);
                 }
             }
         }
@@ -647,275 +879,8 @@ impl Canvas {
                 let x_lo = ((pair[0] - 0.5).ceil() as i64).max(0);
                 let x_hi = ((pair[1] - 0.5).ceil() as i64).min(canvas_w);
                 for x in x_lo..x_hi {
-                    self.set_pixel(x as u32, y as u32, color);
+                    self.set_pixel_raw(x as u32, y as u32, color);
                 }
-            }
-        }
-    }
-}
-
-/// A small RGBA8 image used as sprite content. Structurally similar to `Canvas`'s pixel
-/// buffer, but represents drawable material rather than a render target. Can be built
-/// in-memory ([`Bitmap::new`]/[`Bitmap::solid`]) or loaded from a file on disk
-/// ([`Bitmap::from_file`]).
-#[derive(Debug, Clone)]
-pub struct Bitmap {
-    width: u32,
-    height: u32,
-    pixels: Vec<Color>,
-}
-
-impl Bitmap {
-    /// Creates a bitmap from an explicit pixel buffer (row-major, RGBA8).
-    ///
-    /// # Panics
-    /// Panics if `pixels.len() != width * height`, or via [`Bitmap::checked_len`] if
-    /// `width`/`height` don't fit in `usize` on the current target, or if
-    /// `width * height` overflows `usize`.
-    pub fn new(width: u32, height: u32, pixels: Vec<Color>) -> Self {
-        let expected = Self::checked_len(width, height);
-        assert_eq!(
-            pixels.len(),
-            expected,
-            "Bitmap::new: pixels.len() ({}) must equal width*height ({})",
-            pixels.len(),
-            expected
-        );
-        Self {
-            width,
-            height,
-            pixels,
-        }
-    }
-
-    /// Creates a bitmap of the given size, every pixel set to `color`.
-    pub fn solid(width: u32, height: u32, color: Color) -> Self {
-        let len = Self::checked_len(width, height);
-        Self {
-            width,
-            height,
-            pixels: vec![color; len],
-        }
-    }
-
-    /// Loads an image file (PNG, JPEG, GIF, or BMP) from `path` and converts it to a
-    /// bitmap. Every source pixel format (RGB, grayscale, indexed palette, etc.) is
-    /// converted to this crate's RGBA8 color model: sources without an alpha channel get
-    /// a fully-opaque (255) default alpha.
-    ///
-    /// Returns `Err(Error::ImageLoad(_))` rather than panicking for a missing file, an
-    /// unsupported format, or malformed/corrupt image data -- per this crate's
-    /// recoverable-error convention (see the crate-level Code Style notes), a bad file on
-    /// disk is exactly the kind of caller-facing condition that shouldn't panic.
-    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Error> {
-        let img = image::open(path.as_ref())
-            .map_err(|e| Error::ImageLoad(format!("{}: {e}", path.as_ref().display())))?;
-        let rgba = img.into_rgba8();
-        let (width, height) = rgba.dimensions();
-        let pixels = rgba
-            .pixels()
-            .map(|p| Color::rgba(p[0], p[1], p[2], p[3]))
-            .collect();
-        Ok(Self {
-            width,
-            height,
-            pixels,
-        })
-    }
-
-    /// `width * height` as a `usize`, converting each dimension with a checked cast first
-    /// (rather than a truncating `as usize`) so this can't silently disagree with the
-    /// `u32` dimensions on a target where `usize` is narrower than `u32`.
-    fn checked_len(width: u32, height: u32) -> usize {
-        let w: usize = width.try_into().expect("Bitmap width too large for usize");
-        let h: usize = height
-            .try_into()
-            .expect("Bitmap height too large for usize");
-        w.checked_mul(h)
-            .expect("Bitmap dimensions too large: width * height overflows usize")
-    }
-
-    /// Bitmap width in pixels.
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-
-    /// Bitmap height in pixels.
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-
-    /// Row-major pixel index for `(x, y)`, or `None` if out of bounds — mirrors
-    /// `Canvas::index`.
-    fn index(&self, x: u32, y: u32) -> Option<usize> {
-        if x >= self.width || y >= self.height {
-            return None;
-        }
-        Some(y as usize * self.width as usize + x as usize)
-    }
-
-    /// Returns the color at `(x, y)`, or `None` if out of bounds.
-    pub fn pixel(&self, x: u32, y: u32) -> Option<Color> {
-        self.index(x, y).map(|i| self.pixels[i])
-    }
-}
-
-/// The rectangle of canvas pixels a [`Sprite`] last drew over, saved so
-/// [`Canvas::draw_sprite`] can restore them before drawing the sprite again elsewhere.
-/// Tagged with the id of the `Canvas` it was captured from, so it's never mistakenly
-/// restored onto a different canvas instance (see `Canvas::draw_sprite`).
-#[derive(Debug)]
-struct DrawnFootprint {
-    canvas_id: u64,
-    x: i64,
-    y: i64,
-    width: u32,
-    height: u32,
-    pixels: Vec<Color>,
-}
-
-/// A movable 2D bitmap positioned over a canvas. See [`Canvas::draw_sprite`] for how
-/// moving and redrawing a sprite avoids leaving a trail of its previous position.
-#[derive(Debug)]
-pub struct Sprite {
-    bitmap: Bitmap,
-    position: Point,
-    last_draw: Option<DrawnFootprint>,
-}
-
-/// Manually implemented (rather than `#[derive(Clone)]`) so a cloned sprite starts with
-/// no drawing history of its own: it copies the bitmap and position, but not
-/// `last_draw`, since the clone has never actually been drawn anywhere. Without this, a
-/// clone of an already-drawn sprite would restore the *original* sprite's footprint the
-/// first time it's drawn, corrupting whatever the original still shows on the canvas.
-impl Clone for Sprite {
-    fn clone(&self) -> Self {
-        Self {
-            bitmap: self.bitmap.clone(),
-            position: self.position,
-            last_draw: None,
-        }
-    }
-}
-
-impl Sprite {
-    /// Creates a sprite from `bitmap`, placed at `position` (top-left of the bitmap).
-    pub fn new(bitmap: Bitmap, position: Point) -> Self {
-        Self {
-            bitmap,
-            position,
-            last_draw: None,
-        }
-    }
-
-    /// The sprite's current position.
-    pub fn position(&self) -> Point {
-        self.position
-    }
-
-    /// Moves the sprite to a new position. Takes effect the next time
-    /// [`Canvas::draw_sprite`] is called with this sprite — that call restores whatever
-    /// the sprite covered at its previous position before drawing it at the new one.
-    pub fn move_to(&mut self, position: Point) {
-        self.position = position;
-    }
-
-    /// The sprite's bitmap content.
-    pub fn bitmap(&self) -> &Bitmap {
-        &self.bitmap
-    }
-}
-
-impl Canvas {
-    /// Draws `sprite`'s bitmap onto this canvas at its current position, clipped to
-    /// canvas bounds.
-    ///
-    /// Uses save-under/restore-under: if `sprite` was drawn by an earlier call to this
-    /// method, whatever the canvas showed at that previous footprint is restored first,
-    /// then the canvas content at the new footprint is captured before the sprite is
-    /// drawn over it. This is what lets a sprite move and be redrawn repeatedly without
-    /// leaving a trail of its old position — **as long as nothing else draws into its
-    /// footprint in between two `draw_sprite` calls for it**; if something does, this
-    /// restore overwrites that intervening content. A real per-frame redraw loop (a
-    /// future `Terminal`/`Frame` abstraction redrawing the whole scene from scratch each
-    /// frame) wouldn't have that limitation; this is the simpler, self-contained
-    /// mechanism available today. Each `Sprite` only remembers its own last footprint —
-    /// drawing a different sprite, or drawing this one onto a different `Canvas`, doesn't
-    /// know about or restore anything another sprite painted over the same area.
-    ///
-    /// Within the new footprint, fully transparent bitmap pixels (`alpha == 0`) are
-    /// skipped rather than overwriting the canvas; non-transparent pixels replace
-    /// outright (no alpha blending, matching the no-anti-aliasing precedent set by
-    /// `draw_shape`).
-    pub fn draw_sprite(&mut self, sprite: &mut Sprite) {
-        let canvas_w = self.width as i64;
-        let canvas_h = self.height as i64;
-
-        if let Some(prev) = sprite.last_draw.take() {
-            // A footprint captured from a *different* canvas has nothing to do with this
-            // one's current pixels; restoring it here would corrupt this canvas with
-            // stale content from elsewhere, so just drop it instead.
-            if prev.canvas_id == self.id {
-                self.restore_footprint(&prev);
-            }
-        }
-
-        let (px, py) = (sprite.position.x as i64, sprite.position.y as i64);
-        let bmp_w = sprite.bitmap.width as i64;
-        let bmp_h = sprite.bitmap.height as i64;
-        let x_lo = px.max(0);
-        let x_hi = (px + bmp_w).min(canvas_w);
-        let y_lo = py.max(0);
-        let y_hi = (py + bmp_h).min(canvas_h);
-        let cap_w = (x_hi - x_lo).max(0) as usize;
-        let cap_h = (y_hi - y_lo).max(0) as usize;
-        let mut saved = Vec::with_capacity(cap_w * cap_h);
-
-        let canvas_row_len = self.width as usize;
-        let bmp_row_len = sprite.bitmap.width as usize;
-        for y in y_lo..y_hi {
-            let canvas_row = y as usize * canvas_row_len;
-            let bmp_row = (y - py) as usize * bmp_row_len;
-            for x in x_lo..x_hi {
-                // In-bounds by construction: x_lo/x_hi/y_lo/y_hi are already clipped to
-                // both canvas and bitmap dimensions, so no bounds check is needed here.
-                let idx = canvas_row + x as usize;
-                saved.push(self.pixels[idx]);
-                let color = sprite.bitmap.pixels[bmp_row + (x - px) as usize];
-                if color.a != 0 {
-                    self.pixels[idx] = color;
-                }
-            }
-        }
-
-        sprite.last_draw = Some(DrawnFootprint {
-            canvas_id: self.id,
-            x: x_lo,
-            y: y_lo,
-            width: cap_w as u32,
-            height: cap_h as u32,
-            pixels: saved,
-        });
-    }
-
-    /// Restores the canvas pixels a sprite's previous footprint covered, clipped to
-    /// whatever part of that footprint still falls within current canvas bounds.
-    fn restore_footprint(&mut self, prev: &DrawnFootprint) {
-        let canvas_w = self.width as i64;
-        let canvas_h = self.height as i64;
-        let row_len = prev.width as usize;
-        for dy in 0..prev.height as i64 {
-            let y = prev.y + dy;
-            if y < 0 || y >= canvas_h {
-                continue;
-            }
-            let row = dy as usize * row_len;
-            for dx in 0..prev.width as i64 {
-                let x = prev.x + dx;
-                if x < 0 || x >= canvas_w {
-                    continue;
-                }
-                self.set_pixel(x as u32, y as u32, prev.pixels[row + dx as usize]);
             }
         }
     }
@@ -1035,6 +1000,17 @@ mod tests {
                 height: 50
             }
         );
+    }
+
+    #[test]
+    fn canvas_new_zero_width_does_not_allocate_a_huge_tile_grid() {
+        // Regression: forcing tile counts to at least 1 per axis (`.max(1)`) made a
+        // zero-width canvas with a huge height allocate ~134M tile-version counters
+        // despite having zero actual pixels. This must return promptly with no
+        // allocation anywhere near that size.
+        let c = Canvas::new(0, u32::MAX);
+        assert_eq!((c.width(), c.height()), (0, u32::MAX));
+        assert_eq!(c.pixel(0, 0), None); // no pixels exist at all
     }
 
     #[test]
@@ -1348,200 +1324,5 @@ mod tests {
                 assert_eq!(c.pixel(x, y), Some(color), "at ({x},{y})");
             }
         }
-    }
-
-    #[test]
-    fn bitmap_new_and_pixel_roundtrip() {
-        let b = Bitmap::new(
-            2,
-            2,
-            vec![
-                Color::rgb(1, 0, 0),
-                Color::rgb(2, 0, 0),
-                Color::rgb(3, 0, 0),
-                Color::rgb(4, 0, 0),
-            ],
-        );
-        assert_eq!(b.width(), 2);
-        assert_eq!(b.height(), 2);
-        assert_eq!(b.pixel(0, 0), Some(Color::rgb(1, 0, 0)));
-        assert_eq!(b.pixel(1, 1), Some(Color::rgb(4, 0, 0)));
-        assert_eq!(b.pixel(2, 0), None);
-    }
-
-    #[test]
-    #[should_panic(expected = "must equal width*height")]
-    fn bitmap_new_panics_on_mismatched_pixel_count() {
-        Bitmap::new(2, 2, vec![Color::default(); 3]);
-    }
-
-    #[test]
-    fn bitmap_solid_fills_every_pixel() {
-        let b = Bitmap::solid(3, 2, Color::rgb(9, 9, 9));
-        for y in 0..2 {
-            for x in 0..3 {
-                assert_eq!(b.pixel(x, y), Some(Color::rgb(9, 9, 9)));
-            }
-        }
-    }
-
-    #[test]
-    fn bitmap_from_file_loads_rgba_png() {
-        let b = Bitmap::from_file("tests/fixtures/rgba_2x2.png").expect("fixture should load");
-        assert_eq!((b.width(), b.height()), (2, 2));
-        assert_eq!(b.pixel(0, 0), Some(Color::rgba(255, 0, 0, 255)));
-        assert_eq!(b.pixel(1, 0), Some(Color::rgba(0, 255, 0, 128)));
-        assert_eq!(b.pixel(0, 1), Some(Color::rgba(0, 0, 255, 255)));
-        assert_eq!(b.pixel(1, 1), Some(Color::rgba(255, 255, 0, 0)));
-    }
-
-    #[test]
-    fn bitmap_from_file_converts_rgb_to_rgba8_with_opaque_default_alpha() {
-        let b = Bitmap::from_file("tests/fixtures/rgb_2x2.png").expect("fixture should load");
-        assert_eq!((b.width(), b.height()), (2, 2));
-        // Source has no alpha channel -- every pixel must come out fully opaque (255).
-        assert_eq!(b.pixel(0, 0), Some(Color::rgba(10, 20, 30, 255)));
-        assert_eq!(b.pixel(1, 0), Some(Color::rgba(40, 50, 60, 255)));
-        assert_eq!(b.pixel(0, 1), Some(Color::rgba(70, 80, 90, 255)));
-        assert_eq!(b.pixel(1, 1), Some(Color::rgba(100, 110, 120, 255)));
-    }
-
-    #[test]
-    fn bitmap_from_file_converts_grayscale_to_rgba8() {
-        let b = Bitmap::from_file("tests/fixtures/grayscale_2x2.png").expect("fixture should load");
-        assert_eq!((b.width(), b.height()), (2, 2));
-        // Grayscale -> RGB replicates the luminance value across r/g/b, opaque alpha.
-        assert_eq!(b.pixel(0, 0), Some(Color::rgba(0, 0, 0, 255)));
-        assert_eq!(b.pixel(1, 0), Some(Color::rgba(85, 85, 85, 255)));
-        assert_eq!(b.pixel(0, 1), Some(Color::rgba(170, 170, 170, 255)));
-        assert_eq!(b.pixel(1, 1), Some(Color::rgba(255, 255, 255, 255)));
-    }
-
-    #[test]
-    fn bitmap_from_file_missing_file_returns_err_not_panic() {
-        let result = Bitmap::from_file("tests/fixtures/does_not_exist.png");
-        assert!(matches!(result, Err(Error::ImageLoad(_))));
-    }
-
-    #[test]
-    fn bitmap_from_file_malformed_image_returns_err_not_panic() {
-        let result = Bitmap::from_file("tests/fixtures/malformed.png");
-        assert!(matches!(result, Err(Error::ImageLoad(_))));
-    }
-
-    #[test]
-    fn sprite_move_to_updates_position() {
-        let mut s = Sprite::new(Bitmap::solid(1, 1, Color::rgb(1, 1, 1)), Point::new(0, 0));
-        assert_eq!(s.position(), Point::new(0, 0));
-        s.move_to(Point::new(5, 7));
-        assert_eq!(s.position(), Point::new(5, 7));
-    }
-
-    #[test]
-    fn draw_sprite_opaque_pixels_overwrite_background() {
-        let mut c = Canvas::new(4, 4);
-        c.set_pixel(1, 1, Color::rgb(50, 50, 50)); // pre-existing background content
-        let mut sprite = Sprite::new(Bitmap::solid(2, 2, Color::rgb(9, 9, 9)), Point::new(1, 1));
-        c.draw_sprite(&mut sprite);
-        for y in 1..3 {
-            for x in 1..3 {
-                assert_eq!(c.pixel(x, y), Some(Color::rgb(9, 9, 9)), "at ({x},{y})");
-            }
-        }
-    }
-
-    #[test]
-    fn draw_sprite_transparent_pixels_preserve_background() {
-        let mut c = Canvas::new(3, 3);
-        c.set_pixel(1, 1, Color::rgb(50, 50, 50)); // background under the transparent sprite pixel
-        let bitmap = Bitmap::new(
-            1,
-            1,
-            vec![Color::rgba(9, 9, 9, 0)], // fully transparent
-        );
-        let mut sprite = Sprite::new(bitmap, Point::new(1, 1));
-        c.draw_sprite(&mut sprite);
-        // The transparent sprite pixel must not have overwritten the background beneath it.
-        assert_eq!(c.pixel(1, 1), Some(Color::rgb(50, 50, 50)));
-    }
-
-    #[test]
-    fn draw_sprite_clips_to_canvas_bounds_without_panic() {
-        let mut c = Canvas::new(2, 2);
-        // Sprite mostly off-canvas to the bottom-right; only its top-left pixel is visible.
-        let mut sprite = Sprite::new(Bitmap::solid(4, 4, Color::rgb(1, 2, 3)), Point::new(1, 1));
-        c.draw_sprite(&mut sprite);
-        assert_eq!(c.pixel(1, 1), Some(Color::rgb(1, 2, 3)));
-        assert_eq!(c.pixel(0, 0), Some(Color::default()));
-    }
-
-    #[test]
-    fn draw_sprite_negative_position_does_not_panic() {
-        let mut c = Canvas::new(2, 2);
-        // Sprite anchored off-canvas to the top-left; only its bottom-right pixel is visible.
-        let mut sprite = Sprite::new(Bitmap::solid(2, 2, Color::rgb(4, 5, 6)), Point::new(-1, -1));
-        c.draw_sprite(&mut sprite);
-        assert_eq!(c.pixel(0, 0), Some(Color::rgb(4, 5, 6)));
-        assert_eq!(c.pixel(1, 1), Some(Color::default()));
-    }
-
-    #[test]
-    fn draw_sprite_move_and_redraw_restores_old_footprint() {
-        let mut c = Canvas::new(5, 1);
-        c.set_pixel(0, 0, Color::rgb(50, 50, 50)); // pre-existing background at the sprite's start
-        let mut sprite = Sprite::new(Bitmap::solid(1, 1, Color::rgb(9, 9, 9)), Point::new(0, 0));
-        c.draw_sprite(&mut sprite);
-        assert_eq!(c.pixel(0, 0), Some(Color::rgb(9, 9, 9)));
-
-        sprite.move_to(Point::new(4, 0));
-        c.draw_sprite(&mut sprite);
-        // Old position must be restored to what it was before the sprite was ever drawn
-        // there — not left painted with the sprite's color.
-        assert_eq!(c.pixel(0, 0), Some(Color::rgb(50, 50, 50)));
-        // New position now shows the sprite.
-        assert_eq!(c.pixel(4, 0), Some(Color::rgb(9, 9, 9)));
-    }
-
-    #[test]
-    fn draw_sprite_redraw_at_same_position_is_a_noop_change() {
-        let mut c = Canvas::new(3, 1);
-        let mut sprite = Sprite::new(Bitmap::solid(1, 1, Color::rgb(7, 7, 7)), Point::new(1, 0));
-        c.draw_sprite(&mut sprite);
-        c.draw_sprite(&mut sprite); // redraw without moving
-        assert_eq!(c.pixel(1, 0), Some(Color::rgb(7, 7, 7)));
-    }
-
-    #[test]
-    fn draw_sprite_clone_has_no_drawing_history() {
-        let mut c = Canvas::new(3, 1);
-        let mut original = Sprite::new(Bitmap::solid(1, 1, Color::rgb(1, 1, 1)), Point::new(0, 0));
-        c.draw_sprite(&mut original);
-
-        // Cloning after drawing must not carry over last_draw -- otherwise drawing the
-        // clone elsewhere would "restore" the original's footprint out from under it.
-        let mut clone = original.clone();
-        clone.move_to(Point::new(2, 0));
-        c.draw_sprite(&mut clone);
-
-        // The original sprite's pixel must be untouched by the clone's draw.
-        assert_eq!(c.pixel(0, 0), Some(Color::rgb(1, 1, 1)));
-        assert_eq!(c.pixel(2, 0), Some(Color::rgb(1, 1, 1)));
-    }
-
-    #[test]
-    fn draw_sprite_on_a_different_canvas_does_not_leak_the_first_canvas_pixels() {
-        let mut canvas_a = Canvas::new(2, 1);
-        let mut sprite = Sprite::new(Bitmap::solid(1, 1, Color::rgb(9, 9, 9)), Point::new(0, 0));
-        canvas_a.draw_sprite(&mut sprite); // captures canvas_a's background into last_draw
-
-        let mut canvas_b = Canvas::new(2, 1);
-        canvas_b.set_pixel(0, 0, Color::rgb(2, 2, 2)); // canvas_b's own distinct background
-        sprite.move_to(Point::new(1, 0));
-        canvas_b.draw_sprite(&mut sprite);
-
-        // The stale footprint captured from canvas_a must not have been restored onto
-        // canvas_b's position (0,0); canvas_b's own background must be untouched.
-        assert_eq!(canvas_b.pixel(0, 0), Some(Color::rgb(2, 2, 2)));
-        assert_eq!(canvas_b.pixel(1, 0), Some(Color::rgb(9, 9, 9)));
     }
 }
