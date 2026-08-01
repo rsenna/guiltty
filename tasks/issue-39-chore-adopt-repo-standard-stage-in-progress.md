@@ -45,7 +45,7 @@ Acceptance:
   mirror `README.md`'s existing DONE/IN PROGRESS/NOT STARTED status list,
   don't restate `docs/spec.md`'s forward-looking Success Criteria as if
   already done), decided rules/conventions (the Always/Ask first/Never list
-  already in `docs/spec.md`'s Code Style section, restated or linked), dev
+  already in `docs/spec.md`'s Boundaries section, restated or linked), dev
   commands (`docs/spec.md`'s Commands block: build/test/lint/format/run
   example), and a "where things live" map (workspace crate layout — mirror
   `docs/spec.md`'s Project Structure section).
@@ -94,7 +94,7 @@ Acceptance:
   verbatim (project-agnostic spec-kit tooling — no guiltty-specific content
   to adapt there).
 - `.specify/memory/constitution.md` is **authored for guiltty**, not a
-  copy-with-title-changed: restate `docs/spec.md`'s Code Style
+  copy-with-title-changed: restate `docs/spec.md`'s Boundaries
   Always/Ask-first/Never rules as constitution articles (e.g. "backend
   concerns never leak into `guiltty-core`", "ask first before a new external
   dependency or backend crate", "never panic on a recoverable error path in
