@@ -38,7 +38,7 @@ Run example:  cargo run -p guiltty-examples --bin <example-name>
 ```
 Cargo.toml              → workspace manifest
 crates/
-  guiltty-core/         → backend-agnostic canvas, shapes, text, regions, zoom/scroll logic; defines the Backend trait
+  guiltty-core/         → backend-agnostic canvas, shapes, text; defines the Backend trait (region/zoom/scroll logic described in the spec is not implemented yet)
   guiltty-sprite/       → movable Bitmap/Sprite drawn onto a guiltty-core Canvas (extracted from guiltty-core; see docs/design/sprite-crate-extraction.md)
   guiltty-kitty/        → kitty graphics protocol backend implementing Backend (escape-sequence encoding/transmission)
   guiltty/              → facade crate: re-exports core API + default (kitty) backend for consumers

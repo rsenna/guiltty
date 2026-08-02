@@ -112,7 +112,7 @@ push to `main`; the 90% line-coverage floor is enforced there too (see
 Cargo.toml              -> workspace manifest
 repo.toml               -> repo metadata (stage, description) for the cross-repo repo-standard convention
 crates/
-  guiltty-core/         -> Canvas, Color, Point, Rect, Shape, Backend trait, region-version tile grid
+  guiltty-core/         -> Canvas, Color, Point, Rect, Shape, text, Backend trait, region-version tile grid
   guiltty-sprite/       -> Bitmap, Sprite (draw_on/clear_footprint/place/discard_footprint)
   guiltty-kitty/        -> KittyBackend (kitty graphics protocol encoding/transmission)
   guiltty/              -> facade crate re-exporting the above for consumers
