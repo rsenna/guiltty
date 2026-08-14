@@ -6,6 +6,8 @@ A Rust library for drawing real, pixel-level 2D graphics in the terminal, using 
 [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) as its first
 backend.
 
+[![Ferris.love badge](https://ferris.love/badge/rsenna/guiltty?show=call_fn%2Cdef_fn%2Cdef_struct%2Cdef_method%2Cdef_trait)](https://ferris.love/rsenna/guiltty)
+
 ## Why
 
 Currently, TUI toolkits such as [`ratatui`](https://github.com/ratatui/ratatui) and
