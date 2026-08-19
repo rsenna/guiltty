@@ -24,7 +24,7 @@ jobs:
       # mise.toml pins Rust to the workspace's declared MSRV; subsequent checks
       # compile and test the repository with that toolchain.
       - name: Install mise-managed tools (rust, cargo-llvm-cov)
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
 
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
