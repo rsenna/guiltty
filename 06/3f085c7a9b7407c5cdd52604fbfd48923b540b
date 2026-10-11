@@ -1,0 +1,21 @@
+docs/manual-kitty-verification.md
+  s_61118a90e6edd6::t_157f84775ea999 1-84
+examples/src/bin/demo.rs
+  s_61118a90e6edd6::t_d25c484ca3106e 79-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "063f085c7a9b7407c5cdd52604fbfd48923b540b",
+  "prompts": {},
+  "sessions": {
+    "s_61118a90e6edd6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_efe3416e3ffev9NchTCcQqRg6e",
+        "model": "big-pickle"
+      },
+      "human_author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
