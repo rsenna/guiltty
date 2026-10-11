@@ -103,12 +103,18 @@ pub enum Response {
 /// required) so it can be unit-tested in isolation from the E2E harness that feeds it.
 pub fn interpret_response(raw: &[u8]) -> Response {
     let s = String::from_utf8_lossy(raw);
-    // The message is everything after the ';' that separates the control keys from the
-    // status. A response without that separator is malformed.
-    let Some(semi) = s.find(';') else {
+    // A valid response is an APC sequence: <ESC>_Gi=<id>[,p=<pid>];<message><ESC>\.
+    // Validate the envelope prefix first so unrelated input that merely contains a
+    // ";OK" (e.g. `garbage;OK`) is not misclassified as a successful transmission.
+    let Some(rest) = s.strip_prefix("\x1b_Gi=") else {
         return Response::Ambiguous;
     };
-    let after = &s[semi + 1..];
+    // `rest` is now `<id>[,p=<pid>];<message><ESC>\`. The message is everything after
+    // the ';' that separates the control keys from the status; no ';' is malformed.
+    let Some(semi) = rest.find(';') else {
+        return Response::Ambiguous;
+    };
+    let after = &rest[semi + 1..];
     // A complete response ends with the APC terminator (ESC backslash). A missing
     // terminator means the response was truncated mid-stream.
     let Some(message) = after.strip_suffix("\x1b\\") else {
@@ -397,6 +403,14 @@ mod tests {
     fn interpret_response_empty_message_is_ambiguous() {
         // A ';' with nothing after it (before the terminator) is ambiguous.
         let raw = b"\x1b_Gi=1;\x1b\\";
+        assert_eq!(interpret_response(raw), Response::Ambiguous);
+    }
+
+    #[test]
+    fn interpret_response_rejects_non_apc_ok() {
+        // Input that merely contains ";OK" but is not a kitty APC response must not be
+        // accepted as a successful transmission.
+        let raw = b"garbage;OK\x1b\\";
         assert_eq!(interpret_response(raw), Response::Ambiguous);
     }
 }

@@ -30,25 +30,64 @@ fn main() {
     // kitty's response is an APC sequence with no trailing newline, so a canonical-mode
     // (line-buffered) PTY would buffer it indefinitely and the read below would hang.
     // Put stdin in raw mode first so the response is delivered byte-by-byte as it arrives.
-    set_raw_mode();
+    // The guard restores the original terminal settings on drop (including on panic).
+    let _tty = TtyGuard::enter_raw_mode();
 
     let result = run();
     std::fs::write(&result_file, result).expect("writing the result file should succeed");
 }
 
-/// Puts stdin (fd 0) into raw mode so kitty's newline-less response is delivered
-/// immediately rather than buffered by the PTY's canonical-mode line discipline.
-fn set_raw_mode() {
-    // SAFETY: tcgetattr/tcsetattr operate on the process's own stdin fd; the termios
-    // struct is zero-initialized before tcgetattr fills it, and cfmakeraw only clears
-    // flags. No pointers escape this function.
-    unsafe {
-        let mut termios: libc::termios = std::mem::zeroed();
-        if libc::tcgetattr(libc::STDIN_FILENO, &mut termios) != 0 {
-            return;
+/// Saves the original stdin termios, puts stdin into raw mode, and restores it on drop.
+///
+/// kitty and the PTY this harness runs in are Unix-only, so this is compiled out on
+/// non-Unix targets (where the harness never runs against a real terminal anyway).
+#[cfg(unix)]
+struct TtyGuard {
+    original: Option<libc::termios>,
+}
+
+#[cfg(unix)]
+impl TtyGuard {
+    fn enter_raw_mode() -> Self {
+        // SAFETY: tcgetattr/tcsetattr operate on the process's own stdin fd; the termios
+        // struct is zero-initialized before tcgetattr fills it, and cfmakeraw only clears
+        // flags. No pointers escape this struct.
+        unsafe {
+            let mut original: libc::termios = std::mem::zeroed();
+            if libc::tcgetattr(libc::STDIN_FILENO, &mut original) != 0 {
+                // stdin is not a TTY — nothing to save/raw, nothing to restore.
+                return TtyGuard { original: None };
+            }
+            let mut raw = original;
+            libc::cfmakeraw(&mut raw);
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw);
+            TtyGuard {
+                original: Some(original),
+            }
         }
-        libc::cfmakeraw(&mut termios);
-        libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &termios);
+    }
+}
+
+#[cfg(unix)]
+impl Drop for TtyGuard {
+    fn drop(&mut self) {
+        // SAFETY: restoring the previously-read termios to the process's own stdin fd.
+        if let Some(original) = &self.original {
+            unsafe {
+                libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, original);
+            }
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct TtyGuard;
+
+#[cfg(not(unix))]
+impl TtyGuard {
+    fn enter_raw_mode() -> Self {
+        // Non-Unix targets have no kitty/PTY to speak to, so raw mode is irrelevant.
+        TtyGuard
     }
 }
 
@@ -61,7 +100,10 @@ fn run() -> &'static str {
         Fill::solid(Color::rgb(255, 0, 0)),
     );
 
-    let id = NonZeroU32::new(1).expect("1 is a valid non-zero image id");
+    // Use the process id as the image/placement id so this run does not overwrite an
+    // image a fresh terminal may already hold under a fixed id; the harness runs in a
+    // fresh kitty window, but a unique id costs nothing and avoids the collision class.
+    let id = NonZeroU32::new(std::process::id()).expect("the process id is non-zero");
     let action = build_transmit_action(&canvas, id);
 
     // Verbosity::All (q=0) makes kitty respond with OK/error; Silent would suppress the
