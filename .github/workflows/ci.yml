@@ -35,5 +35,8 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Shell tests for Speckit bootstrap scripts
+        run: bash tests/shell/specify-scripts-test.sh
+
       - name: cargo llvm-cov (also runs the full test suite; fails if line coverage drops below 90%)
         run: cargo llvm-cov --workspace --summary-only --fail-under-lines 90

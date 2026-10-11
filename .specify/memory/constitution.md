@@ -21,12 +21,12 @@ crate boundaries this describes, is an **ask-first** change.
 
 ### II. Recoverable Errors Never Panic
 
-Public API returns `Result<T, guiltty_core::Error>` for recoverable
-conditions (a missing/malformed image file, a failed terminal write, a
-stale sprite footprint) rather than panicking. Panics are reserved for
-programmer-error invariants only (e.g. an out-of-bounds internal index) --
-never a condition a caller could legitimately hit and need to recover
-from.
+Every public API must report recoverable failures through its documented
+error type (for example, `guiltty_core::Error` for canvas/backend failures
+and `guiltty_sprite::StaleFootprint` for stale sprite footprints) rather than
+panicking. Panics are reserved for programmer-error invariants only (e.g.
+an out-of-bounds internal index) -- never a condition a caller could
+legitimately hit and need to recover from.
 
 ### III. Ask First On New Dependencies
 

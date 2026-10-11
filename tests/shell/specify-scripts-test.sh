@@ -84,6 +84,13 @@ fi
 out=$(run_script create-new-feature.sh --short-name "My Feature" --dry-run "x" 2>&1)
 assert_contains "custom short name" "my-feature" "$out"
 
+out=$(run_script create-new-feature.sh --short-name -n --dry-run "x" 2>&1)
+assert_contains "short name beginning with -n is not consumed by echo" "001-n" "$out"
+
+assert_fails "empty short name rejected" \
+    run_script create-new-feature.sh --short-name '---' "x"
+assert_fails "non-ASCII-only slug rejected" \
+    run_script create-new-feature.sh --short-name '東京' "x"
 assert_fails "non-numeric --number rejected" \
     run_script create-new-feature.sh --number abc "x"
 assert_fails "oversized --number rejected" \
@@ -93,27 +100,83 @@ long_name=$(printf 'a%.0s' $(seq 1 300))
 out=$(run_script create-new-feature.sh --short-name "$long_name" --dry-run "x" 2>&1)
 assert_contains "branch-length truncation warning" "exceeded GitHub" "$out"
 
+# Missing/empty spec templates must fail before creating a feature directory.
+spec_template="$TMP/.specify/templates/spec-template.md"
+cp "$spec_template" "$TMP/spec-template.md.backup"
+rm "$spec_template"
+if SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/create-new-feature.sh" \
+    --number 998 --short-name missing-template "Missing template" >"$TMP/template-error.out" 2>&1; then
+    fail "missing spec template rejected (expected non-zero exit)"
+else
+    ok
+fi
+assert_contains "missing template error is clear" "Spec template not found" "$(cat "$TMP/template-error.out")"
+assert "missing template creates no feature directory" test ! -e "$TMP/specs/998-missing-template"
+mv "$TMP/spec-template.md.backup" "$spec_template"
+
+# A successful creation persists feature context, and that generated state stays
+# out of git so it cannot dirty a developer's checkout.
+if SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/create-new-feature.sh" \
+    --number 997 --short-name smoke-feature "Smoke feature" >"$TMP/create-feature.out" 2>&1; then
+    ok
+else
+    fail "successful feature creation exits zero"
+fi
+assert "successful feature creation writes spec.md" test -s "$TMP/specs/997-smoke-feature/spec.md"
+assert "successful feature creation persists feature.json" test -s "$TMP/.specify/feature.json"
+if python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["feature_directory"] == "specs/997-smoke-feature"' "$TMP/.specify/feature.json"; then
+    ok
+else
+    fail "feature.json stores a relative feature_directory"
+fi
+assert "feature.json is gitignored" git -C "$REPO_ROOT" check-ignore -q .specify/feature.json
+
 # --- 3. check-prerequisites.sh -------------------------------------------
 mkdir -p "$TMP/specs/001-empty"
-out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/001-empty" \
-    SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" 2>&1)
-assert_contains "missing spec.md rejected" "spec.md not found" "$out"
+if SPECIFY_FEATURE_DIRECTORY="$TMP/specs/001-empty" SPECIFY_INIT_DIR="$TMP" \
+    bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" >"$TMP/missing-spec.out" 2>&1; then
+    fail "missing spec.md rejected (expected non-zero exit)"
+else
+    ok
+fi
+out=$(cat "$TMP/missing-spec.out")
+assert_contains "missing spec.md error text" "spec.md not found" "$out"
 
 mkdir -p "$TMP/specs/002-spec-only"
 touch "$TMP/specs/002-spec-only/spec.md"
-out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/002-spec-only" \
-    SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" 2>&1)
-assert_contains "missing plan.md rejected" "plan.md not found" "$out"
+if SPECIFY_FEATURE_DIRECTORY="$TMP/specs/002-spec-only" SPECIFY_INIT_DIR="$TMP" \
+    bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" >"$TMP/missing-plan.out" 2>&1; then
+    fail "missing plan.md rejected (expected non-zero exit)"
+else
+    ok
+fi
+out=$(cat "$TMP/missing-plan.out")
+assert_contains "missing plan.md error text" "plan.md not found" "$out"
 
 mkdir -p "$TMP/specs/003-complete"
 touch "$TMP/specs/003-complete/spec.md" "$TMP/specs/003-complete/plan.md"
 out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/003-complete" \
-    SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" --json 2>&1)
-assert_contains "JSON output has FEATURE_DIR" '"FEATURE_DIR"' "$out"
+    SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" --json 2>/dev/null)
+if printf '%s\n' "$out" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert isinstance(data,dict) and "FEATURE_DIR" in data'; then
+    ok
+else
+    fail "check-prerequisites --json emits valid JSON with FEATURE_DIR"
+fi
 
 out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/003-complete" \
     SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" --paths-only 2>&1)
 assert_contains "paths-only output has REPO_ROOT" "REPO_ROOT: " "$out"
+
+# setup-tasks must direct a feature with both files missing to specify first.
+mkdir -p "$TMP/specs/004-no-prerequisites"
+if SPECIFY_FEATURE_DIRECTORY="$TMP/specs/004-no-prerequisites" SPECIFY_INIT_DIR="$TMP" \
+    bash "$SPECIFY_SCRIPTS/setup-tasks.sh" >"$TMP/tasks-prerequisite.out" 2>&1; then
+    fail "setup-tasks rejects missing spec before plan (expected non-zero exit)"
+else
+    ok
+fi
+assert_contains "setup-tasks asks for specify before plan" "spec.md not found" "$(cat "$TMP/tasks-prerequisite.out")"
+
 
 # --- 4. feature path resolution (common.sh) ------------------------------
 out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/003-complete" SPECIFY_INIT_DIR="$TMP" \
@@ -133,8 +196,12 @@ assert_contains "override wins over core template" "overrides/spec-template.md" 
 # run is environment-dependent — jq is exposed as a shell builtin here — so
 # this asserts the output contract rather than the specific code path.)
 out=$(SPECIFY_INIT_DIR="$TMP" \
-    bash "$SPECIFY_SCRIPTS/create-new-feature.sh" --json --dry-run "fallback test" 2>&1)
-assert_contains "JSON output has BRANCH_NAME" '"BRANCH_NAME"' "$out"
+    bash "$SPECIFY_SCRIPTS/create-new-feature.sh" --json --dry-run "fallback test" 2>/dev/null)
+if printf '%s\n' "$out" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert isinstance(data,dict) and isinstance(data.get("BRANCH_NAME"),str) and data["BRANCH_NAME"]'; then
+    ok
+else
+    fail "create-new-feature --json emits valid JSON with BRANCH_NAME"
+fi
 
 # --- 7. workflow metadata and gate ordering ------------------------------
 wf="$REPO_ROOT/.specify/workflows/speckit/workflow.yml"

@@ -97,7 +97,7 @@ if [ -z "$FEATURE_DESCRIPTION" ]; then
 fi
 
 # Trim whitespace and validate description is not empty (e.g., user passed only whitespace)
-FEATURE_DESCRIPTION=$(echo "$FEATURE_DESCRIPTION" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
+FEATURE_DESCRIPTION=$(printf '%s\n' "$FEATURE_DESCRIPTION" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')
 if [ -z "$FEATURE_DESCRIPTION" ]; then
     echo "Error: Feature description cannot be empty or contain only whitespace" >&2
     exit 1
@@ -129,7 +129,7 @@ get_highest_from_specs() {
 # Function to clean and format a branch name
 clean_branch_name() {
     local name="$1"
-    echo "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//'
+    printf '%s\n' "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//'
 }
 
 # Resolve repository root using common.sh functions which prioritize .specify
@@ -187,11 +187,11 @@ generate_branch_name() {
             result="$result$word"
             count=$((count + 1))
         done
-        echo "$result"
+        printf '%s\n' "$result"
     else
         # Fallback to original logic if no meaningful words found
         local cleaned=$(clean_branch_name "$description")
-        echo "$cleaned" | tr '-' '\n' | grep -v '^$' | head -3 | tr '\n' '-' | sed 's/-$//'
+        printf '%s\n' "$cleaned" | tr '-' '\n' | grep -v '^$' | head -3 | tr '\n' '-' | sed 's/-$//'
     fi
 }
 
@@ -203,6 +203,11 @@ else
     # Generate from description with smart filtering
     BRANCH_SUFFIX=$(generate_branch_name "$FEATURE_DESCRIPTION")
 fi
+if [ -z "$BRANCH_SUFFIX" ]; then
+    echo "Error: Feature name must contain at least one ASCII letter or digit" >&2
+    exit 1
+fi
+
 
 # Warn if --number and --timestamp are both specified
 if [ "$USE_TIMESTAMP" = true ] && [ -n "$BRANCH_NUMBER" ]; then
@@ -264,16 +269,23 @@ if [ "$DRY_RUN" != true ]; then
         exit 1
     fi
 
-    mkdir -p "$FEATURE_DIR"
-
+    # Resolve and validate the required spec template before creating the feature
+    # directory. Never leave an empty spec.md that downstream existence checks accept.
+    TEMPLATE=""
     if [ ! -f "$SPEC_FILE" ]; then
-        TEMPLATE=$(resolve_template "spec-template" "$REPO_ROOT") || true
-        if [ -n "$TEMPLATE" ] && [ -f "$TEMPLATE" ]; then
-            cp "$TEMPLATE" "$SPEC_FILE"
-        else
-            echo "Warning: Spec template not found; created empty spec file" >&2
-            touch "$SPEC_FILE"
+        if ! TEMPLATE=$(resolve_template "spec-template" "$REPO_ROOT"); then
+            echo "Error: Spec template not found; cannot create '$SPEC_FILE'" >&2
+            exit 1
         fi
+        if [ -z "$TEMPLATE" ] || [ ! -s "$TEMPLATE" ]; then
+            echo "Error: Spec template is missing or empty; cannot create '$SPEC_FILE'" >&2
+            exit 1
+        fi
+    fi
+
+    mkdir -p "$FEATURE_DIR"
+    if [ ! -f "$SPEC_FILE" ]; then
+        cp "$TEMPLATE" "$SPEC_FILE"
     fi
 
     # Persist to .specify/feature.json so downstream commands can find the feature

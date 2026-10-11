@@ -9,7 +9,7 @@ description: "Task list template for feature implementation"
 
 **Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+- **Tests**: Every behavioral change requires test tasks, consistent with Principle IV in `.specify/memory/constitution.md`. Tests MUST be written first and fail before implementation. Include tests for every behavior changed; do not omit them unless the change is strictly documentation-only or otherwise has no observable behavior.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
