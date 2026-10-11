@@ -241,7 +241,7 @@ if [ "$BRANCH_NAME_BYTES" -gt "$MAX_BRANCH_LENGTH" ]; then
     # Truncate suffix at word boundary if possible (byte-based cut)
     TRUNCATED_SUFFIX=$(printf '%s' "$BRANCH_SUFFIX" | cut -b1-$MAX_SUFFIX_LENGTH)
     # Remove trailing hyphen if truncation created one
-    TRUNCATED_SUFFIX=$(echo "$TRUNCATED_SUFFIX" | sed 's/-$//')
+    TRUNCATED_SUFFIX="${TRUNCATED_SUFFIX%-}"
 
     ORIGINAL_BRANCH_NAME="$BRANCH_NAME"
     BRANCH_NAME="${FEATURE_NUM}-${TRUNCATED_SUFFIX}"
