@@ -21,11 +21,11 @@ IDs `V1`-`V3`, per that doc's own Follow-up section) hasn't happened yet.
 Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90`.
 
 Sequencing, by task ID (no separate "tier" labels — go straight by dependency
-order below): **T1 first**, unconditionally — nothing has ever rendered to a
-real terminal (`KittyBackend::present()` is a no-op stub), which blocks
-visually verifying literally everything else, including Success Criterion #7.
-**T2 and T3 are independent of T1 and of each other** — both can be built in
-parallel with T1 or with each other. **T4 (the runnable example) is last**,
+order below): **T1 first**, unconditionally — every later task's visual
+verification depends on a working transmission path, which only T1 provides
+(verified 2026-10-11 in a real kitty terminal). **T2 and T3 are independent of
+T1 and of each other** — both can be built in parallel with T1 or with each
+other. **T4 (the runnable example) is last**,
 depending on T1–T3 (T3 is a soft dependency — see its own Dependencies line):
 spec.md's Success Criterion #7 wants the example to demonstrate the full v0
 feature set covered so far, and viewport regions/zoom/scroll (tracked
@@ -34,7 +34,7 @@ demonstrates what's covered by T1–T3.
 
 ---
 
-- [ ] **T1 — Kitty protocol: encode and transmit a static image** 🔒 — implemented twice: first hand-rolled (PR #21), then reimplemented on top of the `kittage` crate (see PR after this note) once review of the hand-rolled version surfaced enough real protocol subtleties (cursor movement, image/placement identity, a chunking footgun found in kittage itself, with a draft issue report prepared for the user to file upstream but not yet submitted) that adopting a maintained encoder made more sense than continuing to hand-roll. Kept unchecked either way: the manual real-terminal visual verification required by this task's own Verify section still hasn't happened (no kitty-compatible terminal available in this environment), and switching encoders does not resolve the still-open protocol question (whether repeated `present()` calls reliably update the same placement rather than blanking it) -- that's a question about terminal *behavior*, not encoding correctness, and only real-terminal testing can answer it. Check this box once a human confirms it renders correctly in a real terminal.
+- [x] **T1 — Kitty protocol: encode and transmit a static image** 🔒 — implemented twice: first hand-rolled (PR #21), then reimplemented on top of the `kittage` crate (see PR after this note) once review of the hand-rolled version surfaced enough real protocol subtleties (cursor movement, image/placement identity, a chunking footgun found in kittage itself, with a draft issue report prepared for the user to file upstream but not yet submitted) that adopting a maintained encoder made more sense than continuing to hand-roll. Verified 2026-10-11 in a real kitty terminal: the demo rendered correctly (screenshot pixel analysis confirmed the red rect, blue circle, green ellipse, and sprite all present), and the second `present()` call updated the same placement rather than blanking it (sprite moved, background preserved) -- answering the previously-open repeated-`present()` question.
 
 Acceptance:
 - The `Backend` trait (`crates/guiltty-core/src/lib.rs`) changes from
@@ -149,7 +149,7 @@ this landing first so sprites can use a real image instead of `Bitmap::solid`.
 
 ---
 
-- [x] **T4 — Runnable example demonstrating T1–T3** -- code implemented; manual real-terminal visual verification still pending (same caveat as T1 -- no kitty-compatible terminal available in this environment)
+- [x] **T4 — Runnable example demonstrating T1–T3** -- code implemented; manual real-terminal visual verification done 2026-10-11 in kitty (canvas/text/shapes/sprite all rendered; sprite movement preserved the background).
 
 Acceptance:
 - `examples/src/bin/placeholder.rs` is replaced (or a new example binary is
