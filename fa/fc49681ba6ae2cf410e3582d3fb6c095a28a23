@@ -1,0 +1,19 @@
+.specify/scripts/bash/create-new-feature.sh
+  s_61118a90e6edd6::t_7c6a4410b8f2bd 244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fafc49681ba6ae2cf410e3582d3fb6c095a28a23",
+  "prompts": {},
+  "sessions": {
+    "s_61118a90e6edd6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_efe3416e3ffev9NchTCcQqRg6e",
+        "model": "big-pickle"
+      },
+      "human_author": "Roger Senna [parser] <roger.senna@tesco.com>"
+    }
+  }
+}
