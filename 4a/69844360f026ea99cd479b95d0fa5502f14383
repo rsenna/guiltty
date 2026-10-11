@@ -1,0 +1,18 @@
+.specify/integrations/speckit.manifest.json
+  h_ccc29536574c7b 10
+.specify/scripts/bash/create-new-feature.sh
+  h_ccc29536574c7b 9,38,99-103
+tests/shell/specify-scripts-test.sh
+  h_ccc29536574c7b 92-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a69844360f026ea99cd479b95d0fa5502f14383",
+  "prompts": {},
+  "humans": {
+    "h_ccc29536574c7b": {
+      "author": "Roger Senna [parser] <roger.senna@tesco.com>"
+    }
+  }
+}
