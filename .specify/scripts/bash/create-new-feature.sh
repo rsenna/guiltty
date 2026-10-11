@@ -48,6 +48,19 @@ while [ $i -le $# ]; do
                 exit 1
             fi
             BRANCH_NUMBER="$next_arg"
+            # Validate --number up front: a non-numeric value would otherwise
+            # die under `set -e` with bash's terse "value too great for base",
+            # and a huge value would wrap in Bash arithmetic and produce a
+            # wrong (negative) feature prefix. Cap at 6 digits (999999), far
+            # below the 64-bit wrap point and beyond any real feature count.
+            if ! [[ "$BRANCH_NUMBER" =~ ^[0-9]+$ ]]; then
+                echo "Error: --number must be a non-negative integer, got '$BRANCH_NUMBER'" >&2
+                exit 1
+            fi
+            if [ ${#BRANCH_NUMBER} -gt 6 ]; then
+                echo "Error: --number is too large (max 999999)" >&2
+                exit 1
+            fi
             ;;
         --timestamp)
             USE_TIMESTAMP=true
@@ -214,16 +227,19 @@ else
 fi
 
 # GitHub enforces a 244-byte limit on branch names
-# Validate and truncate if necessary
+# Validate and truncate if necessary. Measure in bytes (not characters) so a
+# non-ASCII name can't slip past the limit: `${#var}` counts characters, which
+# under-counts multi-byte UTF-8.
 MAX_BRANCH_LENGTH=244
-if [ ${#BRANCH_NAME} -gt $MAX_BRANCH_LENGTH ]; then
+BRANCH_NAME_BYTES=$(printf '%s' "$BRANCH_NAME" | LC_ALL=C wc -c | tr -d ' ')
+if [ "$BRANCH_NAME_BYTES" -gt "$MAX_BRANCH_LENGTH" ]; then
     # Calculate how much we need to trim from suffix
     # Account for prefix length: timestamp (15) + hyphen (1) = 16, or sequential (3) + hyphen (1) = 4
     PREFIX_LENGTH=$(( ${#FEATURE_NUM} + 1 ))
     MAX_SUFFIX_LENGTH=$((MAX_BRANCH_LENGTH - PREFIX_LENGTH))
 
-    # Truncate suffix at word boundary if possible
-    TRUNCATED_SUFFIX=$(echo "$BRANCH_SUFFIX" | cut -c1-$MAX_SUFFIX_LENGTH)
+    # Truncate suffix at word boundary if possible (byte-based cut)
+    TRUNCATED_SUFFIX=$(printf '%s' "$BRANCH_SUFFIX" | cut -b1-$MAX_SUFFIX_LENGTH)
     # Remove trailing hyphen if truncation created one
     TRUNCATED_SUFFIX=$(echo "$TRUNCATED_SUFFIX" | sed 's/-$//')
 
@@ -231,8 +247,8 @@ if [ ${#BRANCH_NAME} -gt $MAX_BRANCH_LENGTH ]; then
     BRANCH_NAME="${FEATURE_NUM}-${TRUNCATED_SUFFIX}"
 
     >&2 echo "[specify] Warning: Branch name exceeded GitHub's 244-byte limit"
-    >&2 echo "[specify] Original: $ORIGINAL_BRANCH_NAME (${#ORIGINAL_BRANCH_NAME} bytes)"
-    >&2 echo "[specify] Truncated to: $BRANCH_NAME (${#BRANCH_NAME} bytes)"
+    >&2 echo "[specify] Original: $ORIGINAL_BRANCH_NAME ($(printf '%s' "$ORIGINAL_BRANCH_NAME" | LC_ALL=C wc -c | tr -d ' ') bytes)"
+    >&2 echo "[specify] Truncated to: $BRANCH_NAME ($(printf '%s' "$BRANCH_NAME" | LC_ALL=C wc -c | tr -d ' ') bytes)"
 fi
 
 FEATURE_DIR="$SPECS_DIR/$BRANCH_NAME"

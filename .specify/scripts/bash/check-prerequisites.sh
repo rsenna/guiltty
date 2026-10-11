@@ -124,6 +124,12 @@ if [[ ! -d "$FEATURE_DIR" ]]; then
     exit 1
 fi
 
+if [[ ! -f "$FEATURE_SPEC" ]]; then
+    echo "ERROR: spec.md not found in $FEATURE_DIR" >&2
+    echo "Run /speckit.specify first to create the feature spec." >&2
+    exit 1
+fi
+
 if [[ ! -f "$IMPL_PLAN" ]]; then
     echo "ERROR: plan.md not found in $FEATURE_DIR" >&2
     echo "Run /speckit.plan first to create the implementation plan." >&2

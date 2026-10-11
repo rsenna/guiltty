@@ -60,9 +60,10 @@ A stale "not yet implemented" note, a broken doc link, a crate list
 missing a crate that now exists -- these are bugs, not polish, and they
 only get more misleading the longer they're left. Fix doc staleness
 encountered while touching the affected area in the same PR, not a
-follow-up (`docs/spec.md`'s crate list went stale exactly this way after
-the `guiltty-sprite` extraction, and was fixed as part of the same repo-
-standard bootstrap this constitution belongs to -- see issue #39).
+follow-up (`docs/spec.md`'s crate list still omits `guiltty-sprite` and
+describes sprites as living in `guiltty-core` -- a known staleness this
+bootstrap does not fix, since issue #39 is pure scaffolding and moves no
+existing `docs/*.md` content).
 
 ## Development Constraints
 
