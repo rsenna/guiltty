@@ -89,6 +89,8 @@ assert_contains "short name beginning with -n is not consumed by echo" "001-n" "
 
 assert_fails "empty short name rejected" \
     run_script create-new-feature.sh --short-name '---' "x"
+assert_fails "explicitly empty --short-name rejected" \
+    run_script create-new-feature.sh --short-name '' "Add user authentication"
 assert_fails "non-ASCII-only slug rejected" \
     run_script create-new-feature.sh --short-name '東京' "x"
 assert_fails "non-numeric --number rejected" \

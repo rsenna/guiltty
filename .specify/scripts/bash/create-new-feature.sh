@@ -6,7 +6,7 @@ JSON_MODE=false
 DRY_RUN=false
 ALLOW_EXISTING=false
 SHORT_NAME=""
-BRANCH_NUMBER=""
+SHORT_NAME_SET=false
 USE_TIMESTAMP=false
 ARGS=()
 i=1
@@ -35,6 +35,7 @@ while [ $i -le $# ]; do
                 exit 1
             fi
             SHORT_NAME="$next_arg"
+            SHORT_NAME_SET=true
             ;;
         --number)
             if [ $((i + 1)) -gt $# ]; then
@@ -95,6 +96,11 @@ if [ -z "$FEATURE_DESCRIPTION" ]; then
     echo "Usage: $0 [--json] [--dry-run] [--allow-existing-branch] [--short-name <name>] [--number N] [--timestamp] <feature_description>" >&2
     exit 1
 fi
+if [ "$SHORT_NAME_SET" = true ] && [ -z "$SHORT_NAME" ]; then
+    echo "Error: --short-name cannot be empty" >&2
+    exit 1
+fi
+
 
 # Trim whitespace and validate description is not empty (e.g., user passed only whitespace)
 FEATURE_DESCRIPTION=$(printf '%s\n' "$FEATURE_DESCRIPTION" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')

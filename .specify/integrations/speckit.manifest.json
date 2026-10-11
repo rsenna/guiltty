@@ -7,7 +7,7 @@
     ".specify/scripts/bash/setup-plan.sh": "23a7c520b8c943910ddcec0ef163990464054fdc8a7e6c825eefdffa43244d37",
     ".specify/scripts/bash/setup-tasks.sh": "3393ab92d4ccc5ef50a4662ae7b441922fff70076cb215e9254ce6d6d7ed6abb",
     ".specify/scripts/bash/check-prerequisites.sh": "a314a6157bb9859c128df4a86a5a4dae060d75ba3ab0fb4eeb0373e6326d2593",
-    ".specify/scripts/bash/create-new-feature.sh": "d6fe1297eaa89dffabfabbde68fd2036fe12fdecefdcc36592f95a48571cf6e1",
+    ".specify/scripts/bash/create-new-feature.sh": "a48c583ca68779e35f5d790fc2dad05d76b7353cf777281647aaa20dda68b0ca",
     ".specify/templates/constitution-template.md": "ce7549540fa45543cca797a150201d868e64495fdff39dc38246fb17bd4024b3",
     ".specify/templates/checklist-template.md": "0ad704b60af2df817aee1c0a2ecc0e0304b271d2de34047df1c891735967033e",
     ".specify/templates/tasks-template.md": "045067b92f0e76169f935a6f68b31dacc886d0534a7dcfd968f91edcfc172305",
