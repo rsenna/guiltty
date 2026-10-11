@@ -37,6 +37,7 @@ Dependencies: none; blocks T2–T8.
 Acceptance:
 - Add a design/ADR under `specs/decisions/` before implementation. It decides whether components belong in `guiltty-core` or a new crate (new crate boundary is ask-first), how components render through the backend-agnostic surface, and how state/ownership and focus are represented.
 - Decide whether keyboard input uses Kitty keyboard protocol directly or a backend-agnostic event abstraction; specify key/modifier/repeat/release behavior, resize and cell/pixel-size queries, and focus-in/out. Mouse support remains optional and is not included without a separate scope decision.
+- Decide the supported character repertoire and visible fallback for text. Structured values commonly contain lowercase, punctuation, and possibly non-ASCII; unsupported characters must not be silently omitted from a view.
 - Define a synchronous/simple event-loop integration; no forced async runtime.
 - Specify that UI/event types do not leak into `guiltty-core` if the approved crate boundary places them elsewhere, and that Kitty-specific event decoding stays out of backend-agnostic APIs.
 - Record the intended Loom adapter boundary: only `loom-orb-kitty` depends on guiltty, not Loom core crates.
@@ -73,6 +74,7 @@ Dependencies: T2.
 
 Acceptance:
 - Text input supports single-line editing, cursor movement, selection, and the editing keys chosen in T2.
+- Text input renders characters according to T2's explicit text-repertoire/fallback contract, including lowercase and punctuation needed for ordinary commands.
 - Button exposes focus and activation through the approved keyboard model.
 - Rendering and input behavior are testable without launching a terminal; terminal-specific presentation remains in backend crates.
 - Tests cover editing, cursor/selection bounds, activation, and focus behavior.
@@ -93,6 +95,7 @@ Acceptance:
 - Selectable list supports keyboard-driven selection and scrolling for content larger than its visible region.
 - Table/record view lays out structured rows/columns with documented clipping and overflow behavior.
 - Both consume viewport/crop/scroll capabilities through the API selected by T2; do not duplicate the v0 viewport design or add Kitty-specific placement to core.
+- Structured values retain text fidelity: tests cover lowercase, punctuation, and representative non-ASCII input, asserting supported characters render and unsupported characters follow T2's visible fallback rather than disappearing silently.
 - Tests cover selection/scroll boundaries and stable column/record layout for representative content.
 
 Verify:
@@ -101,7 +104,7 @@ Verify:
 
 Files: component crate/module selected by T2; viewport API from the existing viewport follow-up; tests and docs.
 
-Dependencies: T2, T3, and the viewport primitives planned by `docs/design/viewport-regions-zoom-scroll.md` / `tasks/plan.md`.
+Dependencies: T2, T3, and the viewport readiness gate: before starting this task, the viewport follow-up in `docs/design/viewport-regions-zoom-scroll.md` must be broken into checkboxed, dependency-ordered V1–V3 tasks and those tasks must be merged. `tasks/plan.md` currently says that breakdown has not happened; leave this task blocked until it does. Do not reprioritize viewport work from this Loom issue.
 
 ---
 
