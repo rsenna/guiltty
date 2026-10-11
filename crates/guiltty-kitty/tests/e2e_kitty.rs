@@ -16,17 +16,25 @@ use std::time::{Duration, Instant};
 /// socket, or the temp result file.
 struct ProcessGuard {
     children: Vec<Child>,
+    paths: Vec<std::path::PathBuf>,
 }
 
 impl ProcessGuard {
     fn new() -> Self {
         Self {
             children: Vec::new(),
+            paths: Vec::new(),
         }
     }
 
     fn push(&mut self, child: Child) {
         self.children.push(child);
+    }
+
+    /// Registers a file path (control socket, result file) to remove on drop, so a
+    /// panic or early return cannot leak temp files.
+    fn push_path(&mut self, path: &std::path::Path) {
+        self.paths.push(path.to_path_buf());
     }
 }
 
@@ -35,6 +43,9 @@ impl Drop for ProcessGuard {
         for child in &mut self.children {
             let _ = child.kill();
             let _ = child.wait();
+        }
+        for path in &self.paths {
+            let _ = std::fs::remove_file(path);
         }
     }
 }
@@ -118,6 +129,7 @@ fn e2e_kitty_accepts_transmission() {
     let socket =
         std::env::temp_dir().join(format!("guiltty-kitty-e2e-{}.sock", std::process::id()));
     let _ = std::fs::remove_file(&socket);
+    guard.push_path(&socket);
     let kitty = Command::new("kitty")
         .env("DISPLAY", format!(":{display}"))
         .env("LIBGL_ALWAYS_SOFTWARE", "1")
@@ -143,8 +155,24 @@ fn e2e_kitty_accepts_transmission() {
     let result_file =
         std::env::temp_dir().join(format!("guiltty-kitty-e2e-{}.result", std::process::id()));
     let _ = std::fs::remove_file(&result_file);
-    let harness = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/debug/kitty_e2e_harness");
+    guard.push_path(&result_file);
+    // Resolve the harness next to this test binary in the target dir. Cargo does not
+    // expose cross-crate binaries via CARGO_BIN_EXE_, so derive it from the test
+    // binary's own location: target/<profile>/deps/e2e_kitty-<hash> -> target/<profile>.
+    // The harness is built by the K2 example in guiltty-examples, so K3 depends on K2;
+    // fail with an actionable message if that binary was not built.
+    let test_exe = std::env::current_exe().expect("current test exe path");
+    let target_dir = test_exe
+        .parent()
+        .expect("deps dir")
+        .parent()
+        .expect("profile dir");
+    let harness = target_dir.join(format!("kitty_e2e_harness{}", std::env::consts::EXE_SUFFIX));
+    assert!(
+        harness.exists(),
+        "harness binary not found at {}; build it first: cargo build -p guiltty-examples --bin kitty_e2e_harness",
+        harness.display()
+    );
     let launch = Command::new("kitty")
         .arg("@")
         .arg("--to")
@@ -176,14 +204,20 @@ fn e2e_kitty_accepts_transmission() {
     );
 }
 
-/// Probes for a free X11 display number by trying to bind the X socket for each
-/// candidate, returning the first that is not already in use.
+/// Probes for a free X11 display number. The starting probe offset is derived from this
+/// process's pid so two concurrent runs begin at different displays, making a collision
+/// between simultaneous runs far less likely. This is still probe-then-use (a residual
+/// TOCTOU race remains); a fully atomic reservation would use `Xvfb -displayfd`, which
+/// needs a unix pipe/handle passed across `exec` and is deferred rather than adding an
+/// untested dev-dependency.
 fn find_free_display() -> u32 {
-    for display in 100..200 {
+    let base = 100 + (std::process::id() % 800) as u32; // pid-distinct start in [100, 899]
+                                                        // Probe forward from `base`, then wrap to the range start.
+    for display in (base..900).chain(100..base) {
         let path = format!("/tmp/.X11-unix/X{display}");
         if !std::path::Path::new(&path).exists() {
             return display;
         }
     }
-    panic!("no free X11 display number found in 100..200");
+    panic!("no free X11 display number found in 100..899");
 }
