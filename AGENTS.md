@@ -51,14 +51,14 @@ Criteria describe working code.
   implementing `Backend`: encodes and transmits a `Canvas`'s pixel buffer as
   a real kitty graphics protocol escape sequence (via the
   [`kittage`](https://github.com/itsjunetime/kittage) crate), covered by
-  protocol-level tests. **Not yet confirmed against a real terminal** -- no
-  kitty-compatible terminal has been available in this environment; see
-  `docs/spec-kitty-e2e.md`.
+  protocol-level tests. **Confirmed against a real kitty terminal**
+  (2026-10-11); see `docs/spec-kitty-e2e.md` for the planned automated
+  verification work.
 - **`guiltty`** (`crates/guiltty`) -- facade crate re-exporting the above
   for consumers.
 - **`examples/src/bin/demo.rs`** -- exercises canvas/text/shapes/sprites
-  across two rendered frames, for manual visual verification once a
-  kitty-compatible terminal is available.
+  across two rendered frames, verified against a real kitty terminal
+  (2026-10-11).
 
 **Not started:** independent viewport regions, zoom, scroll/pan for
 canvases larger than the terminal -- designed

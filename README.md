@@ -35,9 +35,9 @@ Its goals include:
 - [x] Drawing text and vector shapes. **[DONE]**
 - [x] Placing and animating sprites over preserved backgrounds. **[DONE]**
 - [x] Encoding and transmitting frames via the kitty graphics protocol. **[DONE]**
-- [ ] Confirming live rendering against a real kitty-compatible terminal. **[IN PROGRESS]**<br/>
-      Code-complete but unverified: no kitty-compatible terminal has been available in this environment.<br/>
-      See [`docs/spec-kitty-e2e.md`](docs/spec-kitty-e2e.md) for the planned automated + manual verification work.
+- [x] Confirming live rendering against a real kitty-compatible terminal. **[DONE]**<br/>
+      Verified 2026-10-11 in kitty: the demo rendered canvas/text/shapes/sprite correctly.<br/>
+      See [`docs/spec-kitty-e2e.md`](docs/spec-kitty-e2e.md) for the planned automated verification work.
 - [ ] Carving a terminal into multiple independent viewports. **[NOT STARTED]**<br/>
       Design complete — see [`docs/design/viewport-regions-zoom-scroll.md`](docs/design/viewport-regions-zoom-scroll.md) —
       but not yet broken into tasks or implemented.
@@ -55,10 +55,10 @@ What exists today:
 - `guiltty-kitty`: a `KittyBackend` implementing `Backend` — encodes and transmits a `Canvas`'s
   pixel buffer as a real kitty graphics protocol escape sequence (built on the
   [`kittage`](https://github.com/itsjunetime/kittage) crate), covered by protocol-level tests.
-  Not yet confirmed against a real terminal — see the goals checklist above.
+  Confirmed against a real kitty terminal (2026-10-11).
 - `guiltty`: a facade crate re-exporting the above.
 - A runnable example (`examples/src/bin/demo.rs`) exercising canvas/text/shapes/sprites and two
-  rendered frames, for manual visual verification once a kitty-compatible terminal is available.
+  rendered frames, verified against a real kitty terminal (2026-10-11).
 
 **Still missing:** independent viewport regions, zoom, and scroll/pan for canvases larger than
 the terminal (see the goals checklist above). See [`docs/spec.md`](docs/spec.md)'s Success
