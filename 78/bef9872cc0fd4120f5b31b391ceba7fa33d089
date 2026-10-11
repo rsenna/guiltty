@@ -1,0 +1,21 @@
+docs/spec-kitty-e2e.md
+  s_16017a6254045f::t_9a80583d29a2d4 6-10
+tasks/plan.md
+  s_16017a6254045f::t_15566d6e20c381 24-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78bef9872cc0fd4120f5b31b391ceba7fa33d089",
+  "prompts": {},
+  "sessions": {
+    "s_16017a6254045f": {
+      "agent_id": {
+        "tool": "github-copilot-cli",
+        "id": "23abe9f6-2d76-4480-9f88-e0097b0a8ac4",
+        "model": "auto"
+      },
+      "human_author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
