@@ -1,0 +1,27 @@
+.specify/memory/constitution.md
+  s_61118a90e6edd6::t_54f0f0d5a62a7d 63-66
+.specify/scripts/bash/check-prerequisites.sh
+  s_61118a90e6edd6::t_941d0bfe3b2a55 127-132
+.specify/scripts/bash/create-new-feature.sh
+  s_61118a90e6edd6::t_fe343a1ad41f72 51-63,230-232,234-235,241-242,250-251
+.specify/scripts/bash/setup-plan.sh
+  s_61118a90e6edd6::t_e41621549a72e6 20-22,57,59,61
+.specify/templates/tasks-template.md
+  s_61118a90e6edd6::t_566acad96e67d1 10,66,68,71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6b599bbbf31679340d3727fae0e38295e628ac5e",
+  "prompts": {},
+  "sessions": {
+    "s_61118a90e6edd6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_efe3416e3ffev9NchTCcQqRg6e",
+        "model": "big-pickle"
+      },
+      "human_author": "Roger Senna [parser] <roger.senna@tesco.com>"
+    }
+  }
+}
