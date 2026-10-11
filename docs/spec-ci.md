@@ -2,9 +2,9 @@
 
 ## Objective
 
-This repo has no CI at all yet — `cargo fmt`/`clippy`/`test` only ever run locally, on whoever remembers to run them. This spec stands up CI from scratch and adds two kinds of automated, non-LLM static analysis on top of it: test coverage measurement (with a minimum enforced once Task 2 lands) and code-complexity linting.
+**Status: implemented.** This spec records the rollout of GitHub Actions CI, Rust format/lint/test/coverage gates, and complexity linting. At the time it was drafted, those checks ran only locally; the workflow now runs on pull requests and pushes to `main`, enforcing the 90% line-coverage floor.
 
-**Why now:** review threads across recent PRs (#4, #5, #6) repeatedly caught the same classes of bug (integer overflow, missing bounds-clipping) after the fact, across several review rounds each. None of that would have been prevented by coverage or complexity lints specifically, but the absence of *any* CI means nothing is checked automatically before a human/bot ever looks at a diff — not even `cargo test`. Coverage and complexity are the two cheapest, highest-signal, non-LLM checks to add on top of that baseline.
+**Original motivation:** review threads across PRs #4, #5, and #6 repeatedly caught integer-overflow and bounds-clipping bugs after the fact. The goal was to catch such regressions earlier with automated, non-LLM checks.
 
 ## Current baseline (measured 2026-07-23, via `cargo llvm-cov --workspace`)
 
@@ -29,12 +29,12 @@ This repo has no CI at all yet — `cargo fmt`/`clippy`/`test` only ever run loc
 
 ## Tasks
 
-1. **Stand up CI + report coverage (no gate yet).** A GitHub Actions workflow running `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo llvm-cov --workspace --summary-only` (which also runs the full test suite; coverage is computed and printed in the CI log, not yet enforced). Also adds `clippy.toml` with the complexity-lint thresholds and enables `too_many_lines`/`excessive_nesting` via `[workspace.lints.clippy]`. Landing the gate before ever seeing it run for real in CI risks having to immediately re-tune it if CI's numbers differ even slightly from local (different LLVM/toolchain build, etc.) — this task lets that be observed first.
+1. **Stand up CI + report coverage.** ✅ done — GitHub Actions runs `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, the Speckit bootstrap shell regression suite, and `cargo llvm-cov --workspace --summary-only` (which also runs the full Rust test suite). Coverage is reported in CI.
 2. **Enforce the coverage gate.** ✅ done — Once task 1's workflow ran for real and its measured number was confirmed stable, `--fail-under-lines 90` was added to the coverage step so a PR that drops line coverage below 90% fails CI.
 
 ## Success Criteria
 
-1. A GitHub Actions workflow runs on every PR and push to `main`, executing fmt/clippy/test/coverage.
+1. A GitHub Actions workflow runs on every PR and push to `main`, executing fmt/clippy/test/coverage and the Speckit bootstrap shell regression suite.
 2. `clippy.toml` exists with complexity-lint thresholds; `cargo clippy` in CI includes the `too_many_lines`/`excessive_nesting` complexity lints and stays green against current code (or current code is adjusted to satisfy them).
 3. Task 2: CI fails a PR whose line coverage drops below 90%.
 4. Both tasks pass the project's existing quality gate locally before being pushed (this spec doesn't relax that).
