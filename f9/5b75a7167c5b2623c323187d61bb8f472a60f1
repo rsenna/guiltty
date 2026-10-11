@@ -1,0 +1,20 @@
+Cargo.lock
+  h_0f0df16e3c7bfc 151-153
+crates/guiltty-kitty/src/lib.rs
+  h_0f0df16e3c7bfc 37-123,187,367-401
+examples/Cargo.toml
+  h_0f0df16e3c7bfc 17-19
+examples/src/bin/kitty_e2e_harness.rs
+  h_0f0df16e3c7bfc 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f95b75a7167c5b2623c323187d61bb8f472a60f1",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
