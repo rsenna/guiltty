@@ -43,6 +43,10 @@ fn next_image_id() -> NonZeroU32 {
 /// with [`Verbosity::Silent`]) and by the E2E harness (which writes it with a
 /// response-producing verbosity so kitty's accept/reject reply can be read back). The
 /// returned action owns its pixel data, so it is not tied to `canvas`'s lifetime.
+///
+/// The canvas must be non-empty: [`KittyBackend::present`] no-ops on a zero-width or
+/// zero-height canvas before calling this, and direct callers (such as the harness)
+/// must do the same — a zero-sized canvas has no valid kitty raw-image representation.
 pub fn build_transmit_action(canvas: &Canvas, id: NonZeroU32) -> Action<'static, 'static> {
     let (w, h) = (canvas.width(), canvas.height());
     let rgba = canvas.rgba8_bytes();
