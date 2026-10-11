@@ -1,0 +1,14 @@
+docs/manual-kitty-verification.md
+  h_0f0df16e3c7bfc 4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5cf2900040dc28f27f5b039defcf1253fd85193b",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
