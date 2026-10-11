@@ -21,11 +21,11 @@ IDs `V1`-`V3`, per that doc's own Follow-up section) hasn't happened yet.
 Quality gate (every task): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo llvm-cov --workspace --summary-only --fail-under-lines 90`.
 
 Sequencing, by task ID (no separate "tier" labels — go straight by dependency
-order below): **T1 first**, unconditionally — nothing has ever rendered to a
-real terminal (`KittyBackend::present()` is a no-op stub), which blocks
-visually verifying literally everything else, including Success Criterion #7.
-**T2 and T3 are independent of T1 and of each other** — both can be built in
-parallel with T1 or with each other. **T4 (the runnable example) is last**,
+order below): **T1 first**, unconditionally — every later task's visual
+verification depends on a working transmission path, which only T1 provides
+(verified 2026-10-11 in a real kitty terminal). **T2 and T3 are independent of
+T1 and of each other** — both can be built in parallel with T1 or with each
+other. **T4 (the runnable example) is last**,
 depending on T1–T3 (T3 is a soft dependency — see its own Dependencies line):
 spec.md's Success Criterion #7 wants the example to demonstrate the full v0
 feature set covered so far, and viewport regions/zoom/scroll (tracked

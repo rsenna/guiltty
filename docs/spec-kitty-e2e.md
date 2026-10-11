@@ -3,11 +3,11 @@
 ## Objective
 
 Every kitty-protocol-facing task so far (T1's `KittyBackend::present()`, T4's
-runnable example) has shipped with the same unresolved caveat: *manual
-real-terminal visual verification is still pending — no kitty-compatible
-terminal available in this environment.* Nothing built so far has ever been
-confirmed to work against a real terminal. This spec closes part of that gap:
-automated verification against a real terminal, using
+runnable example) shipped with the same caveat: *manual real-terminal visual
+verification is still pending — no kitty-compatible terminal available in this
+environment.* That manual verification has since landed (2026-10-11: the demo
+rendered correctly in a real kitty terminal). This spec closes the remaining
+gap: *automated* verification against a real terminal, using
 [kitty](https://sw.kovidgoyal.net/kitty/) itself — the protocol's reference
 implementation — as a black-box test oracle.
 
