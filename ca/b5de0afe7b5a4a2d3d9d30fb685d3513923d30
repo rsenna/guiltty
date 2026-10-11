@@ -1,0 +1,21 @@
+README.md
+  s_61118a90e6edd6::t_94d49abc168b75 38-40,58,61
+tasks/plan.md
+  s_61118a90e6edd6::t_b3ae4d6318d875 37,152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cab5de0afe7b5a4a2d3d9d30fb685d3513923d30",
+  "prompts": {},
+  "sessions": {
+    "s_61118a90e6edd6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_efe3416e3ffev9NchTCcQqRg6e",
+        "model": "big-pickle"
+      },
+      "human_author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
