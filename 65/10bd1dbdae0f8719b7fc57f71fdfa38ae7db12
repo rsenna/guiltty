@@ -1,0 +1,16 @@
+.specify/integrations/speckit.manifest.json
+  h_ccc29536574c7b 13
+.specify/templates/tasks-template.md
+  h_ccc29536574c7b 182,202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6510bd1dbdae0f8719b7fc57f71fdfa38ae7db12",
+  "prompts": {},
+  "humans": {
+    "h_ccc29536574c7b": {
+      "author": "Roger Senna [parser] <roger.senna@tesco.com>"
+    }
+  }
+}
