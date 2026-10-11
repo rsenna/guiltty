@@ -1,0 +1,14 @@
+crates/guiltty-kitty/tests/e2e_kitty.rs
+  h_0f0df16e3c7bfc 19,26,33-38,47-49,132,158-175,207-212,214-216,222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9806c14bd173738e272161a6c509b1cb7ad83110",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
