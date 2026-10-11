@@ -1,10 +1,10 @@
 # Manual kitty verification
 
 How to verify, by eye, that `KittyBackend::present()` actually renders in a real
-kitty terminal. This is the manual, non-virtualized counterpart to the automated
-Xvfb-backed E2E test (`crates/guiltty-kitty/tests/e2e_kitty.rs`, Linux-only) and
-the promised follow-up to the "no kitty-compatible terminal available" caveat that
-shipped with `tasks/plan.md`'s T1 and T4.
+kitty terminal. This is the manual, non-virtualized counterpart to the *planned*
+automated Xvfb-backed E2E tier (its Linux-only test is added by a companion PR,
+not this one) and the follow-up to the "no kitty-compatible terminal available"
+caveat that shipped with `tasks/plan.md`'s T1 and T4.
 
 ## Prerequisites
 
