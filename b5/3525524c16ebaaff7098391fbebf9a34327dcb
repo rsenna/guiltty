@@ -1,0 +1,19 @@
+examples/src/bin/kitty_e2e_harness.rs
+  s_a282bc8fb316c0::t_6ad1b18bc396e1 33-34,40-78,80-90,103-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b53525524c16ebaaff7098391fbebf9a34327dcb",
+  "prompts": {},
+  "sessions": {
+    "s_a282bc8fb316c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "53115fcb-7d04-4e24-9042-b26390a40d15",
+        "model": "claude-opus-5"
+      },
+      "human_author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
