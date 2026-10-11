@@ -148,6 +148,9 @@ name = "guiltty-examples"
 version = "0.0.0"
 dependencies = [
  "guiltty",
+ "guiltty-kitty",
+ "kittage",
+ "libc",
 ]
 
 [[package]]

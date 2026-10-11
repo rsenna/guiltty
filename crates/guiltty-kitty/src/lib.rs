@@ -34,6 +34,93 @@ fn next_image_id() -> NonZeroU32 {
     }
 }
 
+/// Builds the kitty `TransmitAndDisplay` action that encodes `canvas`'s pixel buffer as
+/// a kitty graphics protocol escape sequence, using `id` as both the image id and the
+/// placement id (placement ids are namespaced per-image, so reusing the same numeric
+/// value is safe and makes repeated calls target the same on-screen placement).
+///
+/// This is the shared construction used by [`KittyBackend::present`] (which writes it
+/// with [`Verbosity::Silent`]) and by the E2E harness (which writes it with a
+/// response-producing verbosity so kitty's accept/reject reply can be read back). The
+/// returned action owns its pixel data, so it is not tied to `canvas`'s lifetime.
+pub fn build_transmit_action(canvas: &Canvas, id: NonZeroU32) -> Action<'static, 'static> {
+    let (w, h) = (canvas.width(), canvas.height());
+    let rgba = canvas.rgba8_bytes();
+    // NOTE: kittage's own ImageDimensions doc comment says width/height are "divided
+    // by 4 (for some reason)" -- verified empirically (see PR discussion) that for
+    // this Direct-medium transmit path, raw pixel width/height produce the correct
+    // s=/v= control-key values (no /4 scaling applied).
+    let dims = ImageDimensions {
+        width: w,
+        height: h,
+    };
+
+    let image = Image {
+        num_or_id: NumberOrId::Id(id),
+        format: PixelFormat::Rgba32(dims, None),
+        medium: Medium::Direct {
+            // Max allowed chunk size (1024 * 4-byte units = 4096 base64 bytes per
+            // escape code, the protocol's limit) -- kittage does NOT chunk
+            // automatically when this is None; it silently emits one oversized
+            // escape sequence instead. This must be set explicitly.
+            chunk_size: ChunkSize::new(std::num::NonZeroU16::new(1024).unwrap()),
+            data: std::borrow::Cow::Owned(rgba),
+        },
+    };
+
+    let config = DisplayConfig {
+        cursor_movement: CursorMovementPolicy::DontMove,
+        ..Default::default()
+    };
+
+    Action::TransmitAndDisplay {
+        image,
+        config,
+        // Explicit placement id (same numeric value as the image id) so repeated
+        // present() calls target the same on-screen placement instead of relying on
+        // TransmitAndDisplay's implicit default placement.
+        placement_id: Some(id),
+    }
+}
+
+/// The outcome of interpreting a kitty graphics protocol response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Response {
+    /// kitty accepted the transmission (`OK`).
+    Pass,
+    /// kitty rejected the transmission (a non-`OK` error message).
+    Fail,
+    /// The response was truncated or malformed (no clear `OK`/error to classify).
+    Ambiguous,
+}
+
+/// Classifies a raw kitty graphics protocol response as [`Response::Pass`],
+/// [`Response::Fail`], or [`Response::Ambiguous`].
+///
+/// A complete response is an APC sequence of the form
+/// `<ESC>_Gi=<id>[,p=<pid>];<message><ESC>\`, where `<message>` is `OK` on success or an
+/// error string otherwise. This function is a pure byte classifier (no terminal or PTY
+/// required) so it can be unit-tested in isolation from the E2E harness that feeds it.
+pub fn interpret_response(raw: &[u8]) -> Response {
+    let s = String::from_utf8_lossy(raw);
+    // The message is everything after the ';' that separates the control keys from the
+    // status. A response without that separator is malformed.
+    let Some(semi) = s.find(';') else {
+        return Response::Ambiguous;
+    };
+    let after = &s[semi + 1..];
+    // A complete response ends with the APC terminator (ESC backslash). A missing
+    // terminator means the response was truncated mid-stream.
+    let Some(message) = after.strip_suffix("\x1b\\") else {
+        return Response::Ambiguous;
+    };
+    match message.trim() {
+        "OK" => Response::Pass,
+        "" => Response::Ambiguous,
+        _ => Response::Fail,
+    }
+}
+
 /// The kitty graphics protocol backend. Encodes a [`Canvas`]'s pixel buffer as a kitty
 /// graphics protocol APC escape sequence (RGBA8, base64-encoded, chunked per the
 /// protocol's 4096-byte-per-chunk limit) and writes it to `W`. Defaults to writing to
@@ -97,50 +184,7 @@ impl<W: Write> Backend for KittyBackend<W> {
             return Ok(());
         }
 
-        let rgba = canvas.rgba8_bytes();
-        // NOTE: kittage's own ImageDimensions doc comment says width/height are "divided
-        // by 4 (for some reason)" -- verified empirically (see PR discussion) that for
-        // this Direct-medium transmit path, raw pixel width/height produce the correct
-        // s=/v= control-key values (no /4 scaling applied) -- confirmed by inspecting
-        // actual encoder output, not by real-terminal rendering (still unverified end to
-        // end). If real-terminal testing ever shows a 4x size/position mismatch, this is
-        // the first place to look.
-        let dims = ImageDimensions {
-            width: w,
-            height: h,
-        };
-
-        let id = self.image_id;
-
-        let image = Image {
-            num_or_id: NumberOrId::Id(id),
-            format: PixelFormat::Rgba32(dims, None),
-            medium: Medium::Direct {
-                // Max allowed chunk size (1024 * 4-byte units = 4096 base64 bytes per
-                // escape code, the protocol's limit) -- kittage does NOT chunk
-                // automatically when this is None; it silently emits one oversized
-                // escape sequence instead (verified: a 100x100 canvas produced one
-                // ~53KB escape code with no chunk_size set). This must be set
-                // explicitly.
-                chunk_size: ChunkSize::new(std::num::NonZeroU16::new(1024).unwrap()),
-                data: std::borrow::Cow::Borrowed(&rgba),
-            },
-        };
-
-        let config = DisplayConfig {
-            cursor_movement: CursorMovementPolicy::DontMove,
-            ..Default::default()
-        };
-
-        let action = Action::TransmitAndDisplay {
-            image,
-            config,
-            // Explicit placement id (same numeric value as the image id -- placement
-            // ids are namespaced per-image, so no cross-instance collision risk) so
-            // repeated present() calls target the same on-screen placement instead of
-            // relying on TransmitAndDisplay's implicit default placement.
-            placement_id: Some(id),
-        };
+        let action = build_transmit_action(canvas, self.image_id);
 
         // write_transmit_to already flushes the writer internally (verified
         // empirically -- a custom Write wrapper counting flush() calls showed 2 calls
@@ -319,5 +363,40 @@ mod tests {
             out[i_pos..i_end].to_string()
         };
         assert_ne!(extract_id(&out_a), extract_id(&out_b));
+    }
+
+    #[test]
+    fn interpret_response_ok_is_pass() {
+        // kitty's documented success response: <ESC>_Gi=<id>,p=<pid>;OK<ESC>\
+        let raw = b"\x1b_Gi=1,p=1;OK\x1b\\";
+        assert_eq!(interpret_response(raw), Response::Pass);
+    }
+
+    #[test]
+    fn interpret_response_error_is_fail() {
+        // kitty's documented error response: <ESC>_Gi=<id>;EINVAL:<message><ESC>\
+        let raw = b"\x1b_Gi=1;EINVAL:unsupported transmission medium\x1b\\";
+        assert_eq!(interpret_response(raw), Response::Fail);
+    }
+
+    #[test]
+    fn interpret_response_truncated_is_ambiguous() {
+        // A response cut off before the APC terminator (ESC backslash) is ambiguous.
+        let raw = b"\x1b_Gi=1,p=1;OK";
+        assert_eq!(interpret_response(raw), Response::Ambiguous);
+    }
+
+    #[test]
+    fn interpret_response_malformed_is_ambiguous() {
+        // No ';' separator at all: not a well-formed response.
+        let raw = b"\x1b_Gi=1,p=1";
+        assert_eq!(interpret_response(raw), Response::Ambiguous);
+    }
+
+    #[test]
+    fn interpret_response_empty_message_is_ambiguous() {
+        // A ';' with nothing after it (before the terminator) is ambiguous.
+        let raw = b"\x1b_Gi=1;\x1b\\";
+        assert_eq!(interpret_response(raw), Response::Ambiguous);
     }
 }
