@@ -57,11 +57,11 @@ Dependencies: T1. Ask first before adding a crate boundary or external dependenc
 Acceptance:
 - Implement the component/container and focus model selected by T2, with deterministic keyboard navigation and explicit state transitions.
 - Component APIs remain backend-agnostic; no Kitty protocol types appear in public component signatures.
-- Tests assert focus order, focus changes, key dispatch, and behavior at boundaries (first/last component, disabled/unfocusable component if supported).
+- Tests assert focus order, focus changes, key dispatch, and behavior at boundaries (first/last component, disabled/unfocusable component if supported). Focus must be visibly rendered: moving focus between controls changes the rendered canvas, and tests assert that output.
 - No mouse handling unless separately approved.
 
 Verify:
-- Unit tests cover focus/navigation transitions and errors/boundaries.
+- Unit tests cover focus/navigation transitions, errors/boundaries, and visible focus output (including canvas change when focus moves).
 - Run the guiltty quality gate above.
 
 Files: the crate/module boundary selected by T2; public API docs; tests.
@@ -75,12 +75,12 @@ Dependencies: T2.
 Acceptance:
 - Text input supports single-line editing, cursor movement, selection, and the editing keys chosen in T2.
 - Text input renders characters according to T2's explicit text-repertoire/fallback contract, including lowercase and punctuation needed for ordinary commands.
-- Button exposes focus and activation through the approved keyboard model.
+- Text input visibly renders focus, cursor, and selection state; button visibly renders focused/unfocused state as well as activation state.
 - Rendering and input behavior are testable without launching a terminal; terminal-specific presentation remains in backend crates.
-- Tests cover editing, cursor/selection bounds, activation, and focus behavior.
+- Tests cover editing, cursor/selection bounds and rendered state, activation, and visible focus transitions.
 
 Verify:
-- Deterministic unit tests assert state changes and rendered canvas output for representative inputs and boundaries.
+- Deterministic unit tests assert state transitions and their rendered canvas output for representative inputs and boundaries.
 - Run the guiltty quality gate above.
 
 Files: component crate/module selected by T2; tests and public API docs.
@@ -115,10 +115,10 @@ Acceptance:
 - Keep protocol parsing in `guiltty-kitty`; keep event types consumed by components independent of Kitty types.
 - Provide an application-driven synchronous/simple loop; do not introduce an async runtime by default.
 - Mouse events remain out of scope unless separately approved.
-- Tests cover parsing/translation, modifiers, key release/repeat where selected, malformed input, resize, focus transitions, and unknown events.
+- Tests cover parsing/translation, modifiers, key release/repeat where selected, malformed input, resize, focus transitions, unknown events, and exact cell/pixel dimensions returned for representative terminal-size query fixtures.
 
 Verify:
-- Unit/protocol tests use byte fixtures and deterministic event sequences; no terminal required for core behavior.
+- Unit/protocol tests use byte fixtures and deterministic event sequences; assert exact cell and pixel query results, with no terminal required for core behavior.
 - Run the guiltty quality gate above and a real-terminal smoke test for Kitty protocol behavior.
 
 Files: event API crate/module selected by T2; `crates/guiltty-kitty/` for Kitty decoding only; tests/docs.
