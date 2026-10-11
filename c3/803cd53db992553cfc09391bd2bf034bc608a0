@@ -1,0 +1,32 @@
+.github/workflows/ci.yml
+  h_ccc29536574c7b 38-40
+.gitignore
+  h_ccc29536574c7b 9
+.specify/integrations/speckit.manifest.json
+  h_ccc29536574c7b 7-10,13
+.specify/memory/constitution.md
+  h_ccc29536574c7b 24-29
+.specify/scripts/bash/create-new-feature.sh
+  h_ccc29536574c7b 100,132,190,194,206-210,272-274,276-278,280-288
+.specify/scripts/bash/setup-tasks.sh
+  h_ccc29536574c7b 37-42
+.specify/templates/tasks-template.md
+  h_ccc29536574c7b 12
+.specify/workflows/workflow-registry.json
+  h_ccc29536574c7b 9-10
+docs/spec-ci.md
+  h_ccc29536574c7b 5,7,32,37
+tests/shell/specify-scripts-test.sh
+  h_ccc29536574c7b 87-93,103-133,136-143,147-154,159-164,170-180,199-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3803cd53db992553cfc09391bd2bf034bc608a0",
+  "prompts": {},
+  "humans": {
+    "h_ccc29536574c7b": {
+      "author": "Roger Senna [parser] <roger.senna@tesco.com>"
+    }
+  }
+}
