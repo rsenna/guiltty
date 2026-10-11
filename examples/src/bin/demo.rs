@@ -76,6 +76,16 @@ fn main() {
         .present(&canvas)
         .expect("first present should succeed");
 
+    // Pause so the first frame is observable before the second renders -- without this,
+    // both present() calls run back-to-back and a human only ever sees the final frame,
+    // so they can't confirm the initial frame rendered or that the sprite moved without
+    // corrupting the background (see docs/manual-kitty-verification.md).
+    eprintln!("First frame rendered. Press Enter to render the second frame...");
+    let mut line = String::new();
+    std::io::stdin()
+        .read_line(&mut line)
+        .expect("reading a line from stdin should succeed");
+
     // Move the sprite and render a second frame -- a single present() call after an
     // in-memory move wouldn't actually prove movement or background preservation, so
     // both frames are required (see this task's own acceptance criteria).
