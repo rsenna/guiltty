@@ -1,0 +1,19 @@
+scripts/fetch-kitty.sh
+  s_61118a90e6edd6::t_7e9f0f44cc652a 9-10,22-23,25,31-37,64-66,82-91,98-100,108,111,119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bf2c24c3f918e5bfde1d293920a6e6086d52611d",
+  "prompts": {},
+  "sessions": {
+    "s_61118a90e6edd6": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_efe3416e3ffev9NchTCcQqRg6e",
+        "model": "big-pickle"
+      },
+      "human_author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
