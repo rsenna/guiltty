@@ -181,23 +181,12 @@ Before step 1, resolve feature paths:
     - Never reveal future queued questions in advance.
     - If no valid questions exist at start, immediately report no critical ambiguities.
 
-6. Integration after EACH accepted answer (incremental update approach):
-    - Maintain in-memory representation of the spec (loaded once at start) plus the raw file contents.
-    - For the first integrated answer in this session:
-       - Ensure a `## Clarifications` section exists (create it just after the highest-level contextual/overview section per the spec template if missing).
-       - Under it, create (if not present) a `### Session YYYY-MM-DD` subheading for today.
-    - Append a bullet line immediately after acceptance: `- Q: <question> → A: <final answer>`.
-    - Then immediately apply the clarification to the most appropriate section(s):
-       - Functional ambiguity → Update or add a bullet in Functional Requirements.
-       - User interaction / actor distinction → Update User Stories or Actors subsection (if present) with clarified role, constraint, or scenario.
-       - Data shape / entities → Update Data Model (add fields, types, relationships) preserving ordering; note added constraints succinctly.
-       - Non-functional constraint → Add/modify measurable criteria in Success Criteria > Measurable Outcomes (convert vague adjective to metric or explicit target).
-       - Edge case / negative flow → Add a new bullet under Edge Cases / Error Handling (or create such subsection if template provides placeholder for it).
-       - Terminology conflict → Normalize term across spec; retain original only if necessary by adding `(formerly referred to as "X")` once.
-    - If the clarification invalidates an earlier ambiguous statement, replace that statement instead of duplicating; leave no obsolete contradictory text.
-    - Save the spec file AFTER each integration to minimize risk of context loss (atomic overwrite).
-    - Preserve formatting: do not reorder unrelated sections; keep heading hierarchy intact.
-    - Keep each inserted clarification minimal and testable (avoid narrative drift).
+6. Integrate each accepted answer without overwriting newer spec content:
+   - Keep accepted answers and question progress in session memory, but do not use a spec snapshot loaded earlier for writes.
+   - Before each write to `FEATURE_SPEC`, acquire exclusive writer ownership for `FEATURE_DIR`. If no locking mechanism is available, have the parent serialize clarifier agents; only one clarifier may operate on a given `FEATURE_DIR` at a time.
+   - While holding ownership, re-read the latest `FEATURE_SPEC`; apply the accepted answer to that latest content, ensuring a `## Clarifications` section and today's `### Session YYYY-MM-DD` subheading exist, appending `- Q: <question> → A: <final answer>` and updating the appropriate spec section. Replace invalidated statements rather than duplicating them.
+   - Preserve unrelated content, formatting, section order, and heading hierarchy. Keep each clarification minimal and testable.
+   - Atomically write the updated latest spec, then release writer ownership. Never write a stale snapshot.
 
 7. Validation (performed after EACH write plus final pass):
    - Clarifications session contains exactly one bullet per accepted answer (no duplicates).
@@ -207,7 +196,7 @@ Before step 1, resolve feature paths:
    - Markdown structure valid; only allowed new headings: `## Clarifications`, `### Session YYYY-MM-DD`.
    - Terminology consistency: same canonical term used across all updated sections.
 
-8. Write the updated spec back to `FEATURE_SPEC`.
+8. Confirm each accepted answer has already been integrated under step 6; do not write a stale in-memory snapshot as a final pass.
 
 9. **Re-validate Spec Quality Checklist** (if it exists):
    - Check if `FEATURE_DIR/checklists/requirements.md` exists.
@@ -216,7 +205,7 @@ Before step 1, resolve feature paths:
      1. Read the checklist file.
      2. Identify all GitHub task-list checkbox lines — lines matching `- [ ]`, `- [x]`, or `- [X]` (case-insensitive, tolerant of leading whitespace for nested items) outside of code fences. Ignore all other content (headings, notes, non-checkbox bullets, metadata).
      3. For each checkbox line, record its current marker state (checked or unchecked) and item text into a before-snapshot list.
-     4. Re-evaluate each checkbox item against the **updated** spec (the version just saved in step 7).
+     4. Re-evaluate each checkbox item against the latest spec content written in step 6.
      5. For each checkbox item, update only if the checked/unchecked state actually changes:
         - If the item now passes and was unchecked: change `[ ]` to `[x]`.
         - If the item now fails and was checked: change `[x]`/`[X]` to `[ ]`.

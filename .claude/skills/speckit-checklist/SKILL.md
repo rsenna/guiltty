@@ -84,7 +84,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 ## Execution Steps
 
 1. **Setup**: Run `.specify/scripts/bash/check-prerequisites.sh --json` from repo root (do not pass `--template`) and parse JSON for `FEATURE_DIR` and `AVAILABLE_DOCS`. All file paths must be absolute.
-   - After prerequisites resolve the feature paths, attempt to read `.specify/templates/checklist-template.md` from the repository root. If it is available, retain its content as `TEMPLATE_CONTENT`; if it is absent or unreadable, mark the template unavailable and continue to the documented fallback in Step 7. Template lookup failure MUST NOT abort setup or be passed back to the prerequisite script.
+   - After prerequisites resolve the feature paths, source `.specify/scripts/bash/common.sh` and use its `get_repo_root` helper to identify `REPO_ROOT`.
+   - Resolve the template with `resolve_template "checklist-template" "$REPO_ROOT"` inside a conditional so a nonzero status is handled as not found. If it returns a path, read that path into `TEMPLATE_CONTENT`; the resolver applies project override, preset, extension, then core precedence. Do not read only the core `.specify/templates/checklist-template.md`.
+   - If `common.sh` cannot be sourced, the resolver returns no path, or reading the resolved file fails, mark the template unavailable and continue to Step 7 fallback. This MUST NOT abort setup or be passed as `--template` to the prerequisite script.
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **IF EXISTS**: Load `.specify/memory/constitution.md` for project principles and governance constraints.

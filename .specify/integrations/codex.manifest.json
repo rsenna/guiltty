@@ -4,7 +4,7 @@
   "installed_at": "2026-08-30T15:34:26.416506+00:00",
   "files": {
     ".agents/skills/speckit-analyze/SKILL.md": "fae3a7b26d261d5d403ddf09312842395518c45ecdc9bc19f791c8f199e0b236",
-    ".agents/skills/speckit-clarify/SKILL.md": "8fc564b18f2d61b99793e61d5fcf98eb7ff544b265b052d54263e32a8f316ade",
+    ".agents/skills/speckit-clarify/SKILL.md": "16665c03c9aa759ea6c3f7e07ddd4f2129bf7934e987a4b6c9af1bbda41391f0",
     ".agents/skills/speckit-constitution/SKILL.md": "361201852936623da78d7c9b235dc6875f44bc5d695b58b46e35f7b74ca0ac1c",
     ".agents/skills/speckit-implement/SKILL.md": "697eeffb42c1fc6735a44bc1e2d92933f808ff9a0a11a4c84d401f605fdf96c5",
     ".agents/skills/speckit-converge/SKILL.md": "fc4a7ebfda8e800ce373986d8d60919939e7a2ebb0660c7913d0ef1567489141",
