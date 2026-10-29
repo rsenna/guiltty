@@ -77,14 +77,15 @@ Given that feature description, do this:
 
 3. **Resolve the spec feature directory**:
 
-   Specs live under `specs/` unless the user explicitly provides `SPECIFY_FEATURE_DIRECTORY`.
-   1. Use an explicitly provided `SPECIFY_FEATURE_DIRECTORY`.
-   2. Otherwise, reuse the `FEATURE_DIR` returned by `before_specify` or `feature_directory` persisted in `.specify/feature.json`; if both are available, ensure they agree. Do not allocate another directory.
-   3. Only if the hook provided neither, generate the directory using `.specify/init-options.json`: use `YYYYMMDD-HHMMSS` for `timestamp`, otherwise `NNN` for the next available 3-digit sequential number, and construct `<prefix>-<short-name>`.
+   Resolve feature context in this order:
+   1. Use explicit `SPECIFY_FEATURE_DIRECTORY` or `FEATURE_DIR` supplied by the user or parent handoff, and keep the accompanying `SPEC_FILE` scoped to it.
+   2. In a **single-agent root invocation only**, reuse this invocation's `before_specify` result or `.specify/feature.json` as a legacy fallback; if both exist, verify they agree.
+   3. In a multi-agent or child invocation with no explicit invocation-scoped path, stop and ask the parent for `FEATURE_DIR`/`SPEC_FILE`. Never use or overwrite the repository-global `.specify/feature.json` to select another agent's feature.
+   4. Generate a new feature directory only in a single-agent root invocation when neither explicit path nor hook result exists.
 
-   Create the directory only if the hook did not already create it. Reuse any existing `SPEC_FILE`; otherwise copy the resolved active `spec-template` to `SPECIFY_FEATURE_DIRECTORY/spec.md`. Set `SPEC_FILE` and persist its actual directory path to `.specify/feature.json` only if the hook has not already done so. Never create a second feature directory or duplicate spec file.
+   Reuse any existing `SPEC_FILE`; otherwise copy the resolved active `spec-template` to `FEATURE_DIR/spec.md`. Persist `.specify/feature.json` only for a standalone single-agent fallback invocation, never when explicit invocation context is present. Never create a second feature directory or duplicate spec file.
 
-   **IMPORTANT**: Create only one feature per invocation. Directory and branch names are independent. If the hook created/persisted the feature directory, reuse its result.
+   **IMPORTANT**: Create only one feature per invocation. Directory and branch names are independent. If the hook created/persisted the feature directory for this invocation, reuse that result.
 
 4. Load the resolved active `spec-template` file to understand required sections.
 

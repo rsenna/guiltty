@@ -7,11 +7,11 @@
     ".omp/commands/speckit.clarify.md": "86bfff866a9df6d0fbbdf9fbab295902611e53f0e9245af145f58921aa58e5ae",
     ".omp/commands/speckit.constitution.md": "4bf70d4890a066db42d467c4affca627364b7e3def2e2714b10d7f78062f9806",
     ".omp/commands/speckit.implement.md": "0bdd35e69abafd1f8c0a531b469007197ec3d1304c30c2f8deee584a9467ee17",
-    ".omp/commands/speckit.converge.md": "3265252719b874c24a37f29a77933c4fe6a4009bc91a5fc49853646085ab438e",
-    ".omp/commands/speckit.plan.md": "c802e1813316a77354f8b8f14a51c7dc70dc94b740553c4b30bb8aaa0b5579ce",
+    ".omp/commands/speckit.converge.md": "d73d5ed914a25bd3117c4e918d774cbad82a11955d7350f374c922bcb86e7f41",
+    ".omp/commands/speckit.plan.md": "101284df2333303451ec02c6ee89ff385b7e804178e1c881fe24ee3b50093041",
     ".omp/commands/speckit.checklist.md": "b7d2ea8cf89a67770b8e9276adcec253a226a6e51f727751d4ad6595f53dd45d",
     ".omp/commands/speckit.specify.md": "773f0b2b4a699e0dd06b2b3341d906ec9eb9ad979d4758853fbc9d2cb3939279",
     ".omp/commands/speckit.tasks.md": "73bf77fa4284c6b6ce0e92f32c2601911e4858a659a935dbd9e08b9e332870f4",
-    ".omp/commands/speckit.taskstoissues.md": "1ae08fc9b0623eb3a0edeb89444c3cdfebb5cba06f60264838bbb51238798030"
+    ".omp/commands/speckit.taskstoissues.md": "1f718b77d5a31d7fc81413d5185e2dcfb13bd8dcffae00d0486fefabd9620ec1"
   }
 }

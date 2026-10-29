@@ -113,12 +113,11 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **File-based coordination**: Tasks affecting the same files must run sequentially
    - **Validation checkpoints**: Verify each phase completion before proceeding
 
-7. Implementation execution rules:
-   - **Setup first**: Initialize project structure, dependencies, configuration
-   - **Tests before code**: If you need to write tests for contracts, entities, and integration scenarios
-   - **Core development**: Implement models, services, CLI commands, endpoints
-   - **Integration work**: Database connections, middleware, logging, external services
-   - **Polish and validation**: Unit tests, performance optimization, documentation
+7. **Implementation execution rules**:
+   - Follow only the phases present in `tasks.md`: Setup, Foundational, one User Story N phase per story, and Polish. Do not invent Tests, Core, or Integration phases.
+   - Run test tasks before the corresponding implementation tasks; behavioral implementation tasks require a preceding test task. Documentation-only tasks with no observable behavior are exempt.
+   - Initialize setup tasks first, then execute tasks in the file's order while respecting dependencies and parallel markers.
+   - Validate each phase before proceeding and report progress after each task.
 
 8. Progress tracking and error handling:
    - Report progress after each completed task

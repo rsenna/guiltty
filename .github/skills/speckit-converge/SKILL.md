@@ -170,15 +170,13 @@ severity, and a short human-readable description with the evidence (the file/are
   rather than failing.
 - **Nothing remains**: produce zero findings and follow the converged branch in Step 7.
 
-### 5. Assign Severity
+Severity MUST be selected from `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` using the rules below. Apply the highest level that matches; every gap type has an explicit mapping:
 
-- **CRITICAL**: violates a constitution MUST principle, or a `missing`/`contradicts` gap
-  that blocks baseline functionality of a P1 user story.
-- **HIGH**: a `missing` or `partial` gap on a core functional requirement or acceptance
-  criterion.
-- **MEDIUM**: a `partial` gap on a secondary requirement, or an `unrequested` addition with
-  unclear justification.
-- **LOW**: minor partial gaps, polish, or low-risk `unrequested` additions.
+- **Constitution MUST violation**: `CRITICAL`, regardless of gap type.
+- **`missing`**: `CRITICAL` when it blocks baseline functionality of a P1 user story; `HIGH` for a core functional requirement or acceptance criterion; `MEDIUM` for a secondary requirement; `LOW` for a minor or polish item.
+- **`partial`**: `HIGH` for a core functional requirement or acceptance criterion; `MEDIUM` for a secondary requirement; `LOW` for a minor or polish item.
+- **`contradicts`**: `CRITICAL` when it violates a constitution MUST or blocks baseline functionality of a P1 user story; `HIGH` for a core requirement or a significant behavior, security, or correctness conflict; `MEDIUM` for a secondary conflict; `LOW` for a minor conflict.
+- **`unrequested`**: `HIGH` when the addition creates a material security, privacy, or correctness risk; `MEDIUM` when its justification is unclear or it creates a material but non-critical scope risk; `LOW` when it is low-risk and no material harm is identified. If it conflicts with stated intent, classify it as `contradicts` instead.
 
 ### 6. Present the In-Session Findings Summary
 
@@ -207,20 +205,26 @@ Append to the **end** of `tasks.md`, per the append contract:
 1. Scan all existing task IDs; let `M` be the maximum. Determine the next phase number `N`
    (highest existing phase + 1).
 2. Write a single new section header `## Phase N: Convergence`.
-3. Emit one checklist item per actionable finding, ordered CRITICAL/HIGH first, assigning
-   zero-padded IDs `T{M+1:03d}, T{M+2:03d}, …`:
+3. Emit the required task rows for each actionable finding, ordered by severity (CRITICAL/HIGH first). Assign a distinct sequential task ID to every row, starting at `T{M+1:03d}`; never reuse an ID.
+
+   For every `missing` or `partial` gap in a behavioral requirement or acceptance criterion, append a test task FIRST that guards the required behavior, then an implementation task for the same finding. Both rows MUST identify the finding ID and carry the same `source-ref`, `gap-type`, and severity. For a `contradicts` finding whose remediation changes observable behavior, likewise append its regression test before the implementation task. Tests may be omitted only when the remediation is documentation-only and introduces no observable behavior. Keep each finding's test/implementation pair adjacent.
 
    ```markdown
-   - [ ] T042 <imperative description> per <source-ref> (<gap-type>)
+   - [ ] T042 [HIGH] Add a failing regression test for finding F1's required append-only behavior per FR-008 (missing)
+   - [ ] T043 [HIGH] Implement finding F1's append-only behavior per FR-008 (missing)
    ```
 
-   `<source-ref>` traces the task to its origin: e.g. `FR-003`, `SC-002`,
+   A finding that needs only one kind of task (for example, documentation-only clarification) receives only that task. Do not combine a required behavioral test and implementation into one task.
+
+   `<source-ref>` traces each task to its origin: e.g. `FR-003`, `SC-002`,
    `US1/AC2`, `plan: storage decision`, `Constitution II`.
 
    `<gap-type>` is one of `missing`, `partial`, `contradicts`, `unrequested`.
+   The bracketed severity is REQUIRED on every task and MUST be one of
+   `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`; the paired test and implementation
+   tasks for one finding MUST use the same severity and gap type.
 
-   Constitution-violation tasks MUST be emitted first and described as
-   `CRITICAL`.
+   Constitution-violation tasks MUST be emitted first and marked `[CRITICAL]`.
 4. Never reuse or renumber existing IDs. If a prior Convergence phase exists, add a new,
    separately-numbered one below it — do not touch the old one.
 
