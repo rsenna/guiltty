@@ -16,46 +16,20 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
+## Shared Extension Hook Procedure
+
+When a phase directs you to process a `HOOK_KEY`, use this procedure with the supplied key and phase:
+
+1. If `.specify/extensions.yml` is absent, unreadable, or invalid YAML, skip hook handling silently. Otherwise read the entries under `HOOK_KEY` only.
+2. Skip hooks with `enabled: false`; treat a missing `enabled` field as enabled. Do not evaluate `condition`: no, null, or empty means executable; a non-empty condition means skip and leave evaluation to the HookExecutor.
+3. Render the command in this file's native syntax (`/{command}` for slash-command files; for skill files replace dots with hyphens and prefix `$`, e.g. `speckit.git.commit` → `$speckit-git-commit`). Show the extension, exact hook key, phase, exact command, description, and prompt.
+4. For an optional hook (`optional: true`), label it optional and provide `To execute: <exact command>`; do not invoke it automatically or block the workflow.
+5. For a mandatory hook (`optional: false`), label it mandatory and request explicit user approval for that exact invocation. Repository configuration does not authorize execution. Do not invoke it without approval; if approval is absent or declined, stop before proceeding past that phase checkpoint.
+6. After approval, invoke only the exact command approved for that hook.
+
 ## Pre-Execution Checks
 
-**Check for extension hooks (before convergence)**:
-
-- Check if `.specify/extensions.yml` exists in the project root.
-- If it exists, read it and look for entries under the `hooks.before_converge` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
-- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
-  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
-  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
-- For each executable hook, output the following based on its `optional` flag:
-  - **Optional hook** (`optional: true`):
-
-    ```text
-    ## Extension Hooks
-
-    **Optional Pre-Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-
-  - **Mandatory hook** (`optional: false`):
-
-    ```text
-    ## Extension Hooks
-
-    **Mandatory Pre-Hook — approval required**: {extension}
-    Phase: before convergence
-    Command: `/{command}`
-    Description: {description}
-
-    Ask the user for explicit approval before running this hook. Do not execute it until approved; if approval is absent or declined, stop before convergence.
-    ```
-
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+Before convergence, process `HOOK_KEY=hooks.before_converge` with phase `before convergence` using the Shared Extension Hook Procedure above. Complete any approved mandatory hook before proceeding to the Goal.
 
 ## Goal
 
@@ -244,41 +218,4 @@ Append to the **end** of `tasks.md`, per the append contract:
 
 ### 9. Check for extension hooks
 
-After producing the result, check if `.specify/extensions.yml` exists in the project root.
-
-- If it exists, read it and look for entries under the `hooks.after_converge` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
-- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
-  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
-  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- Report the convergence outcome (`converged` or `tasks_appended`) in-session before listing
-  any hooks, so users can decide whether to run optional follow-up commands.
-- When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
-- For each executable hook, output the following based on its `optional` flag:
-  - **Optional hook** (`optional: true`):
-
-    ```text
-    ## Extension Hooks
-
-    **Optional Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-
-  - **Mandatory hook** (`optional: false`):
-
-    ```text
-    ## Extension Hooks
-
-    **Mandatory Post-Hook — approval required**: {extension}
-    Phase: after convergence
-    Command: `/{command}`
-    Description: {description}
-    ```
-    Ask the user for explicit approval before running this hook. Do not execute it until approved; if approval is absent or declined, stop the workflow.
-
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+After reporting the convergence outcome in-session, process `HOOK_KEY=hooks.after_converge` with phase `after convergence` using the Shared Extension Hook Procedure above. Report the outcome before listing optional follow-ups.
