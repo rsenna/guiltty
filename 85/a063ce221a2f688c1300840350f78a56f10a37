@@ -1,0 +1,34 @@
+.agents/commands/speckit.tasks.md
+  h_0f0df16e3c7bfc 81,142,184,189,206
+.agents/skills/speckit-tasks/SKILL.md
+  h_0f0df16e3c7bfc 79,141,183,188,205
+.claude/skills/speckit-tasks/SKILL.md
+  h_0f0df16e3c7bfc 80,142,184,189,206
+.github/skills/speckit-tasks/SKILL.md
+  h_0f0df16e3c7bfc 81,143,185,190,207
+.omp/commands/speckit.tasks.md
+  h_0f0df16e3c7bfc 82,144,186,191,208
+.opencode/commands/speckit.tasks.md
+  h_0f0df16e3c7bfc 83,146,188,193,210
+.specify/integrations/claude.manifest.json
+  h_0f0df16e3c7bfc 14
+.specify/integrations/codex.manifest.json
+  h_0f0df16e3c7bfc 14
+.specify/integrations/copilot.manifest.json
+  h_0f0df16e3c7bfc 14
+.specify/integrations/omp.manifest.json
+  h_0f0df16e3c7bfc 14
+.specify/integrations/opencode.manifest.json
+  h_0f0df16e3c7bfc 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "85a063ce221a2f688c1300840350f78a56f10a37",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
