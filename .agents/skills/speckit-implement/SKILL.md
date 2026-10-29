@@ -96,22 +96,22 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 4. **Ignore-file behavior**: Do not create, modify, or verify ignore files as an implicit implementation step. Only change an ignore file when `tasks.md` explicitly includes that specific change as a task; otherwise leave ignore files untouched.
 5. Parse tasks.md structure and extract:
-   - **Task phases**: Setup, Foundational, User Story N, and Polish, as actually titled in `tasks.md`; do not invent Tests, Core, or Integration phases
+   - **Task phases**: Setup, Foundational, User Story N, optional Convergence, and Polish, as actually titled in `tasks.md`; do not invent Tests, Core, or Integration phases
    - **Task dependencies**: Sequential vs parallel execution rules
    - **Task details**: ID, description, file paths, parallel markers [P]
    - **Execution flow**: Order and dependency requirements
 
 6. Execute implementation following the task plan:
-   - **Phase-by-phase execution**: Complete Setup, then Foundational, then each User Story phase in the order and priority given in `tasks.md`, and finally Polish; follow the actual headings if the task file differs.
+   - **Phase-by-phase execution**: Complete Setup, then Foundational, then each User Story phase in the order and priority given in `tasks.md`, then any `Phase N: Convergence` tasks, and finally Polish; follow the actual headings if the task file differs.
    - **Respect dependencies**: Run sequential tasks in order; parallel tasks marked `[P]` may run together only when their dependencies permit it.
-   - Follow task order and the plan's TDD sequencing within each phase; perform test tasks before their corresponding implementation tasks where specified, without inventing separate Tests/Core/Integration phases.
+   - Follow task order and the plan's TDD sequencing within each phase; perform test tasks before their corresponding implementation tasks. In `Phase N: Convergence`, run each finding's test task before its paired implementation task. Do not invent separate Tests/Core/Integration phases.
    - **File-based coordination**: Tasks affecting the same files must run sequentially.
    - **Validation checkpoints**: Verify each phase completion before proceeding.
 
 7. Implementation execution rules:
    - **Setup**: Initialize only the project structure, dependencies, and configuration required by tasks.
    - **Foundational**: Complete shared architecture, core abstractions, and prerequisites required by user stories.
-   - **User Story N**: Implement and validate each story in the planned priority order, keeping it independently testable where the tasks require it.
+   - **Convergence (optional)**: After User Story phases and before Polish, complete any `Phase N: Convergence` tasks appended by `$speckit-converge`; for each behavioral finding, execute its test task before its paired implementation task.
    - **Polish**: Complete remaining cross-cutting validation, performance work, and documentation specified by the tasks.
 
 8. Progress tracking and error handling:

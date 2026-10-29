@@ -101,22 +101,22 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 4. **Ignore-file scope**: Do not create, modify, or verify ignore files as an implicit implementation step. Only change an ignore file when `tasks.md` explicitly includes that specific change; then make only the task-scoped change and preserve unrelated entries.
 5. Parse tasks.md structure and extract:
-   - **Task phases**: Setup, Foundational, User Story N, and Polish, as actually titled in `tasks.md`; do not invent Tests, Core, or Integration phases
+   - **Task phases**: Setup, Foundational, User Story N, optional `Phase N: Convergence`, and Polish, as actually titled in `tasks.md`; do not invent Tests, Core, or Integration phases
    - **Task dependencies**: Sequential vs parallel execution rules
    - **Task details**: ID, description, file paths, parallel markers [P]
    - **Execution flow**: Order and dependency requirements
 
 6. Execute implementation following the task plan:
-   - **Phase-by-phase execution**: Complete each phase before moving to the next
+   - **Phase-by-phase execution**: Complete Setup, then Foundational, then each User Story phase in the order and priority given in `tasks.md`, then any `Phase N: Convergence` tasks, and finally Polish; follow the actual headings if the task file differs.
    - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together
-   - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
+   - Follow task order and the plan's TDD sequencing within each phase; perform test tasks before their corresponding implementation tasks. In `Phase N: Convergence`, run each finding's test task before its paired implementation task.
    - **File-based coordination**: Tasks affecting the same files must run sequentially
    - **Validation checkpoints**: Verify each phase completion before proceeding
 
 7. **Implementation execution rules**:
-   - Follow only the phases present in `tasks.md`: Setup, Foundational, one User Story N phase per story, and Polish. Do not invent Tests, Core, or Integration phases.
+   - Follow only the phases present in `tasks.md`: Setup, Foundational, one User Story N phase per story, optional `Phase N: Convergence`, and Polish. Do not invent Tests, Core, or Integration phases.
    - Run test tasks before the corresponding implementation tasks; behavioral implementation tasks require a preceding test task. Documentation-only tasks with no observable behavior are exempt.
-   - Initialize setup tasks first, then execute tasks in the file's order while respecting dependencies and parallel markers.
+   - Initialize setup tasks first, then execute tasks in the file's order while respecting dependencies and parallel markers; Convergence phases appear after User Story phases and before Polish, with each behavioral test task before its paired implementation.
    - Validate each phase before proceeding and report progress after each task.
 
 8. Progress tracking and error handling:

@@ -58,11 +58,14 @@ Note: This clarification workflow is expected to run (and be completed) BEFORE i
 
 Execution steps:
 
-1. Run `.specify/scripts/bash/check-prerequisites.sh --json --paths-only` from repo root **once** (combined `--json --paths-only` mode / `-Json -PathsOnly`). Parse minimal JSON payload fields:
-   - `FEATURE_DIR`
-   - `FEATURE_SPEC`
-   - (Optionally capture `IMPL_PLAN`, `TASKS` for future chained flows.)
-   - If JSON parsing fails, abort and instruct user to re-run `$speckit-specify` or verify feature branch environment.
+Before step 1, resolve feature paths:
+   - If incoming `FEATURE_DIR` and `FEATURE_SPEC` are both present, set `SPECIFY_FEATURE_DIRECTORY` to the exact incoming `FEATURE_DIR` for the check-prerequisites invocation. Do not read or overwrite `.specify/feature.json` when explicit invocation paths exist.
+   - If only one path is present, stop and ask the invoking agent/user to provide both paths.
+   - In a child or multi-agent invocation without both paths, stop and ask the parent for them; never use the repository-global fallback.
+   - Only the root single-agent invocation with no explicit paths may use the legacy global fallback.
+1. Run `.specify/scripts/bash/check-prerequisites.sh --json --paths-only` from repo root **once** (combined `--json --paths-only` mode / `-Json -PathsOnly`). Parse the returned `FEATURE_DIR` and `FEATURE_SPEC`.
+   - When incoming paths were supplied, require both returned paths to match the incoming paths exactly. If either differs, stop before loading or editing the spec or checklist; never continue with the mismatching paths.
+   - If JSON parsing fails, abort and instruct the user to re-run `$speckit-specify` or verify the feature context.
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **IF EXISTS**: Load `.specify/memory/constitution.md` for project principles and governance constraints.
