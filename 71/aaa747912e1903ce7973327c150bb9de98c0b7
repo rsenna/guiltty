@@ -1,0 +1,58 @@
+.agents/commands/speckit.clarify.md
+  h_0f0df16e3c7bfc 58-65
+.agents/commands/speckit.implement.md
+  h_0f0df16e3c7bfc 92,98,100,107
+.agents/commands/speckit.taskstoissues.md
+  h_0f0df16e3c7bfc 61,63
+.agents/skills/speckit-clarify/SKILL.md
+  h_0f0df16e3c7bfc 61-68
+.agents/skills/speckit-implement/SKILL.md
+  h_0f0df16e3c7bfc 99,105,107,114
+.agents/skills/speckit-taskstoissues/SKILL.md
+  h_0f0df16e3c7bfc 67,69
+.claude/skills/speckit-clarify/SKILL.md
+  h_0f0df16e3c7bfc 62-69
+.claude/skills/speckit-implement/SKILL.md
+  h_0f0df16e3c7bfc 103,109,111,116,118
+.claude/skills/speckit-taskstoissues/SKILL.md
+  h_0f0df16e3c7bfc 68,70
+.github/skills/speckit-clarify/SKILL.md
+  h_0f0df16e3c7bfc 63-70
+.github/skills/speckit-implement/SKILL.md
+  h_0f0df16e3c7bfc 104,110,112,117,119
+.github/skills/speckit-taskstoissues/SKILL.md
+  h_0f0df16e3c7bfc 69,71
+.omp/commands/speckit.clarify.md
+  h_0f0df16e3c7bfc 60-67
+.omp/commands/speckit.implement.md
+  h_0f0df16e3c7bfc 93,98-99,106
+.omp/commands/speckit.taskstoissues.md
+  h_0f0df16e3c7bfc 62,64
+.opencode/commands/speckit.clarify.md
+  h_0f0df16e3c7bfc 60-67
+.opencode/commands/speckit.implement.md
+  h_0f0df16e3c7bfc 94,99,101,108
+.opencode/commands/speckit.taskstoissues.md
+  h_0f0df16e3c7bfc 63,65
+.specify/integrations/claude.manifest.json
+  h_0f0df16e3c7bfc 7,9,15
+.specify/integrations/codex.manifest.json
+  h_0f0df16e3c7bfc 7,9,15
+.specify/integrations/copilot.manifest.json
+  h_0f0df16e3c7bfc 7,9,15
+.specify/integrations/omp.manifest.json
+  h_0f0df16e3c7bfc 7,9,15
+.specify/integrations/opencode.manifest.json
+  h_0f0df16e3c7bfc 7,9,15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71aaa747912e1903ce7973327c150bb9de98c0b7",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
