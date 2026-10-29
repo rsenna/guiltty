@@ -290,3 +290,4 @@ Report completion (after questioning loop ends or early termination):
 - [ ] Spec quality checklist re-validated against updated spec (if `FEATURE_DIR/checklists/requirements.md` exists)
 - [ ] Extension hooks dispatched or skipped according to the rules in Mandatory Post-Execution Hooks above
 - [ ] Completion reported to user with questions answered, sections touched, checklist status, and coverage summary
+When recommending or invoking `/speckit.plan`, pass this invocation's resolved `FEATURE_DIR` and `FEATURE_SPEC` explicitly; the downstream workflow MUST NOT select a different feature from the repository-global `.specify/feature.json`. If those paths are not available in the handoff context, ask the invoking agent/user rather than guessing.

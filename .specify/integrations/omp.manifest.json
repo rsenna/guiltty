@@ -4,7 +4,7 @@
   "installed_at": "2026-08-30T15:32:55.426175+00:00",
   "files": {
     ".omp/commands/speckit.analyze.md": "6163d0b66e95997d3a26a4f28e9ee7d3db26235a2a4b3ed2bb49ac51ed4b3d58",
-    ".omp/commands/speckit.clarify.md": "e3b62cbe34487debc533404fc9834d59fc280455bc251bdbba0c39d6203bcac9",
+    ".omp/commands/speckit.clarify.md": "86bfff866a9df6d0fbbdf9fbab295902611e53f0e9245af145f58921aa58e5ae",
     ".omp/commands/speckit.constitution.md": "4bf70d4890a066db42d467c4affca627364b7e3def2e2714b10d7f78062f9806",
     ".omp/commands/speckit.implement.md": "0bdd35e69abafd1f8c0a531b469007197ec3d1304c30c2f8deee584a9467ee17",
     ".omp/commands/speckit.converge.md": "3265252719b874c24a37f29a77933c4fe6a4009bc91a5fc49853646085ab438e",

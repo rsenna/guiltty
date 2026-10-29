@@ -3,7 +3,7 @@ description: Identify underspecified areas in the current feature spec by asking
 handoffs:
   - label: Build Technical Plan
     agent: speckit.plan
-    prompt: Create the technical implementation plan from the clarified feature spec, carrying forward all accepted clarifications and user-provided technical constraints.
+    prompt: Create the technical plan using FEATURE_DIR and FEATURE_SPEC resolved by this clarification invocation. Carry forward accepted clarifications and user constraints. Do not select another feature from the repository-global .specify/feature.json; if invocation paths are missing, ask the parent for them.
 ---
 
 ## User Input
