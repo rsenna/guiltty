@@ -73,19 +73,19 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Pre-Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
 
-    Wait for the result of the hook command before proceeding to the Execution Steps.
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Before invoking this hook, present its exact extension, phase, and command to the user and obtain explicit approval for that specific invocation. Approval is REQUIRED even for mandatory hooks; repository configuration cannot authorize execution. If approval is absent or declined, do not invoke the hook and stop the workflow before proceeding.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Execution Steps
 
-1. **Setup**: Run `.specify/scripts/bash/check-prerequisites.sh --json --template checklist-template` from repo root and parse JSON for FEATURE_DIR, AVAILABLE_DOCS list, and TEMPLATE_CONTENT.
-   - All file paths must be absolute.
+1. **Setup**: Run `.specify/scripts/bash/check-prerequisites.sh --json` from repo root (do not pass `--template`) and parse JSON for `FEATURE_DIR` and `AVAILABLE_DOCS`. All file paths must be absolute.
+   - After prerequisites resolve the feature paths, source `.specify/scripts/bash/common.sh` and use its `get_repo_root` helper to identify `REPO_ROOT`.
+   - Resolve the template with `resolve_template "checklist-template" "$REPO_ROOT"` inside a conditional so a nonzero status is handled as not found. If it returns a path, read that path into `TEMPLATE_CONTENT`; the resolver applies project override, preset, extension, then core precedence. Do not read only the core `.specify/templates/checklist-template.md`.
+   - If `common.sh` cannot be sourced, the resolver returns no path, or reading the resolved file fails, mark the template unavailable and continue to Step 7 fallback. This MUST NOT abort setup or be passed as `--template` to the prerequisite script.
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **IF EXISTS**: Load `.specify/memory/constitution.md` for project principles and governance constraints.
@@ -139,7 +139,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Use progressive disclosure: add follow-on retrieval only if gaps detected
    - If source docs are large, generate interim summary items instead of embedding raw text
 
-6. **Generate checklist** - Use TEMPLATE_CONTENT as the structural template and create "Unit Tests for Requirements":
+6. **Generate checklist** - Use `TEMPLATE_CONTENT` as the structural template when it was resolved; otherwise follow the explicit fallback structure in Step 7. Create "Unit Tests for Requirements":
    - Create `FEATURE_DIR/checklists/` directory if it doesn't exist
    - Generate unique checklist filename:
      - Use short, descriptive name based on domain (e.g., `ux.md`, `api.md`, `security.md`)
@@ -147,7 +147,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - File handling behavior:
      - If file does NOT exist: Create new file and number items starting from CHK001
      - If file exists: Append new items to existing file, continuing from the last CHK ID (e.g., if last item is CHK015, start new items at CHK016)
-   - Never delete or replace existing checklist content - always preserve and append
+   - Never delete, rewrite, renumber, reorder, or replace existing checklist records; append only, preserving their IDs, text, markers, and all prior content
+   - Before choosing a checklist filename or writing, obtain exclusive writer ownership of `FEATURE_DIR/checklists/`. Do not run another checklist writer for this feature concurrently. If no shared lock is available, the parent/coordinator MUST serialize checklist writers. After ownership, re-read the target file, recompute the next ID, append all new records in one atomic update, and then release ownership.
    - Leave every newly generated item unchecked (`[ ]`); checkbox state belongs to the reviewer
 
    **CORE PRINCIPLE - Test the Requirements, Not the Implementation**:
@@ -272,7 +273,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 - Simple, memorable filenames that indicate checklist purpose
 - Easy identification and navigation in the `checklists/` folder
 
-To avoid clutter, use descriptive types and clean up obsolete checklists when done.
+Checklist files and their records are append-only. Do not clean up, delete, or replace obsolete records; use a distinct descriptive filename when a separate checklist is needed.
 
 ## Example Checklist Types & Sample Items
 
@@ -375,9 +376,9 @@ Check if `.specify/extensions.yml` exists in the project root.
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    **Mandatory Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Before invoking this hook, present its exact extension, phase, and command to the user and obtain explicit approval for that specific invocation. Approval is REQUIRED even for mandatory hooks; repository configuration cannot authorize execution. If approval is absent or declined, do not invoke the hook and stop the workflow before proceeding.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently

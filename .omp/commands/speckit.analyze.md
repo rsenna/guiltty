@@ -36,13 +36,13 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Pre-Hook**: {extension}
+    Command: `/{command}`
+    Phase: `before_analyze`
+    Description: {description}
 
-    Wait for the result of the hook command before proceeding to the Goal.
+    Before invoking this repository-defined command, request the user's explicit approval for this specific invocation, showing the extension, exact command, phase, and description. Do not invoke it unless the user approves. If approval is absent or declined, stop this workflow before proceeding to the Goal.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Goal
@@ -163,9 +163,9 @@ Output a Markdown report (no file writes) with the following structure:
 
 | ID | Category | Severity | Location(s) | Summary | Recommendation |
 |----|----------|----------|-------------|---------|----------------|
-| A1 | Duplication | HIGH | spec.md:L120-134 | Two similar requirements ... | Merge phrasing; keep clearer version |
+| A-001 | Duplication | HIGH | spec.md:L120-134 | Two similar requirements ... | Merge phrasing; keep clearer version |
 
-(Add one row per finding; generate stable IDs prefixed by category initial.)
+Assign finding IDs sequentially from `A-001` in one report-wide sequence, regardless of category (`A-001`, `A-002`, ...). Do not use category prefixes or restart numbering within a category.
 
 **Coverage Summary Table:**
 
@@ -218,16 +218,17 @@ After reporting, check if `.specify/extensions.yml` exists in the project root.
     Prompt: {prompt}
     To execute: `/{command}`
     ```
-  - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
+- **Mandatory hook** (`optional: false`):
+  ```
+  ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+  **Mandatory Hook**: {extension}
+  Command: `/{command}`
+  Phase: `after_analyze`
+  Description: {description}
+
+  Before invoking this hook, show the user its exact extension, phase, command, and description and ask for explicit approval. Do not invoke it unless the user approves. If approval is not given, stop workflow.
+  ```
 
 ## Operating Principles
 

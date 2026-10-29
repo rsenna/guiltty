@@ -73,19 +73,18 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Execution Steps.
+    **Mandatory Pre-Hook — approval required**: {extension}
+    Hook: {hook_key}
+    Command: `/{command}`
+    User approval: Ask for explicit approval to run this exact command for this hook before invoking it. If the user does not explicitly approve, do not invoke it and stop this workflow here.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Emit `{hook_key}` as the configured phase key (for example, `before_checklist` or `after_checklist`). The displayed command must be the exact invocation proposed. Do not invoke the hook before approval.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Execution Steps
 
-1. **Setup**: Run `.specify/scripts/bash/check-prerequisites.sh --json --template checklist-template` from repo root and parse JSON for FEATURE_DIR, AVAILABLE_DOCS list, and TEMPLATE_CONTENT.
-   - All file paths must be absolute.
+1. **Setup**: Run `.specify/scripts/bash/check-prerequisites.sh --json` from repo root (do not pass `--template`) and parse JSON for `FEATURE_DIR` and `AVAILABLE_DOCS`. All file paths must be absolute.
+   - After prerequisites resolve the feature paths, attempt to read `.specify/templates/checklist-template.md` from the repository root. If it is available, retain its content as `TEMPLATE_CONTENT`; if it is absent or unreadable, mark the template unavailable and continue to the documented fallback in Step 7. Template lookup failure MUST NOT abort setup or be passed back to the prerequisite script.
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **IF EXISTS**: Load `.specify/memory/constitution.md` for project principles and governance constraints.
@@ -139,7 +138,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Use progressive disclosure: add follow-on retrieval only if gaps detected
    - If source docs are large, generate interim summary items instead of embedding raw text
 
-6. **Generate checklist** - Use TEMPLATE_CONTENT as the structural template and create "Unit Tests for Requirements":
+6. **Generate checklist** - Use `TEMPLATE_CONTENT` as the structural template when it was resolved; otherwise follow the explicit fallback structure in Step 7. Create "Unit Tests for Requirements":
    - Create `FEATURE_DIR/checklists/` directory if it doesn't exist
    - Generate unique checklist filename:
      - Use short, descriptive name based on domain (e.g., `ux.md`, `api.md`, `security.md`)
@@ -147,7 +146,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - File handling behavior:
      - If file does NOT exist: Create new file and number items starting from CHK001
      - If file exists: Append new items to existing file, continuing from the last CHK ID (e.g., if last item is CHK015, start new items at CHK016)
-   - Never delete or replace existing checklist content - always preserve and append
+   - Never delete, rewrite, renumber, reorder, or replace existing checklist records; append only, preserving their IDs, text, markers, and all prior content
+   - Before choosing a checklist filename or writing, obtain exclusive writer ownership of `FEATURE_DIR/checklists/`. Do not run another checklist writer for this feature concurrently. If no shared lock is available, the parent/coordinator MUST serialize checklist writers. After ownership, re-read the target file, recompute the next ID, append all new records in one atomic update, and then release ownership.
    - Leave every newly generated item unchecked (`[ ]`); checkbox state belongs to the reviewer
 
    **CORE PRINCIPLE - Test the Requirements, Not the Implementation**:
@@ -375,9 +375,10 @@ Check if `.specify/extensions.yml` exists in the project root.
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Hook — approval required**: {extension}
+    Hook: {hook_key}
+    Command: `/{command}`
+    User approval: Ask for explicit approval to run this exact command for this hook before invoking it. If the user does not explicitly approve, do not invoke it and stop this workflow here.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Emit `{hook_key}` as the configured phase key (for example, `before_checklist` or `after_checklist`). The displayed command must be the exact invocation proposed. Do not invoke the hook before approval.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently

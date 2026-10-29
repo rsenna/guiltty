@@ -3,7 +3,7 @@ description: Identify underspecified areas in the current feature spec by asking
 handoffs:
   - label: Build Technical Plan
     agent: speckit.plan
-    prompt: Create a plan for the spec. I am building with...
+    prompt: Create the technical implementation plan from the clarified feature spec, carrying forward all accepted clarifications and user-provided technical constraints.
 ---
 
 ## User Input
@@ -36,17 +36,17 @@ You **MUST** consider the user input before proceeding (if not empty).
     Prompt: {prompt}
     To execute: `/{command}`
     ```
-  - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
+- **Mandatory hook** (`optional: false`):
+  ```
+  ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+  **Mandatory Pre-Hook**: {extension}
+  Command: `/{command}`
+  Phase: `before_clarify`
+  Description: {description}
 
-    Wait for the result of the hook command before proceeding to the Outline.
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+  Before invoking this hook, show the user its exact extension, phase, command, and description and ask for explicit approval. Do not invoke it unless the user approves. If approval is not given, stop before proceeding.
+  ```
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Outline
@@ -210,7 +210,7 @@ Execution steps:
      1. Read the checklist file.
      2. Identify all GitHub task-list checkbox lines — lines matching `- [ ]`, `- [x]`, or `- [X]` (case-insensitive, tolerant of leading whitespace for nested items) outside of code fences. Ignore all other content (headings, notes, non-checkbox bullets, metadata).
      3. For each checkbox line, record its current marker state (checked or unchecked) and item text into a before-snapshot list.
-     4. Re-evaluate each checkbox item against the **updated** spec (the version just saved in step 7).
+     4. Re-evaluate each checkbox item against the **updated** spec (the version just saved in step 8).
      5. For each checkbox item, update only if the checked/unchecked state actually changes:
         - If the item now passes and was unchecked: change `[ ]` to `[x]`.
         - If the item now fails and was checked: change `[x]`/`[X]` to `[ ]`.
@@ -247,15 +247,17 @@ Check if `.specify/extensions.yml` exists in the project root.
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - For each executable hook, output the following based on its `optional` flag:
-  - **Mandatory hook** (`optional: false`) — **You MUST emit `EXECUTE_COMMAND:` for each mandatory hook**:
+  - **Mandatory hook** (`optional: false`):
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Hook**: {extension}
+    Command: `/{command}`
+    Phase: `after_clarify`
+    Description: {description}
+
+    Before invoking this hook, show the user its exact extension, phase, command, and description and ask for explicit approval. Do not invoke it unless the user approves. If approval is not given, stop workflow.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
   - **Optional hook** (`optional: true`):
     ```
     ## Extension Hooks

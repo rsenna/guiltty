@@ -35,20 +35,17 @@ You **MUST** consider the user input before proceeding (if not empty).
     To execute: `/{command}`
     ```
 
-  - **Mandatory hook** (`optional: false`):
+- **Mandatory hook** (`optional: false`):
+  ```text
+  ## Extension Hooks
 
-    ```text
-    ## Extension Hooks
+  **Mandatory Pre-Hook**: {extension}
+  Command: `/{command}`
+  Phase: `before_converge`
+  Description: {description}
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Goal.
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+  Before invoking this hook, show the user its exact extension, phase, command, and description and ask for explicit approval. Do not invoke it unless the user approves. If approval is not given, stop before proceeding.
+  ```
 
 ## Goal
 
@@ -74,6 +71,8 @@ of the code relative to the feature's artifacts — no git, no branch comparison
   Convergence phase);
 - modify, create, or delete any application code — completing the appended tasks is the
   job of `/speckit.implement`.
+
+**Exclusive-writer coordination**: Convergence appends and implementation task-status updates share `tasks.md` and MUST be serialized. Obtain exclusive writer ownership of the resolved `tasks.md`; if no shared lock is available, the parent/coordinator MUST sequence all task-file writers. While holding ownership, re-read `tasks.md`, recompute the maximum task ID and next phase number, and confirm the findings still match its current contents. If it changed since assessment, reconcile the findings before writing. Append the new section in one atomic update, then release ownership. Never write `tasks.md` concurrently with implement or another converge invocation.
 
 When the codebase already satisfies everything, the command MUST leave `tasks.md`
 **byte-for-byte unchanged** (no empty Convergence header) and report a clean result.
@@ -161,15 +160,13 @@ severity, and a short human-readable description with the evidence (the file/are
   rather than failing.
 - **Nothing remains**: produce zero findings and follow the converged branch in Step 7.
 
-### 5. Assign Severity
+Severity MUST be selected from `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` using the rules below. Apply the highest level that matches; every gap type has an explicit mapping:
 
-- **CRITICAL**: violates a constitution MUST principle, or a `missing`/`contradicts` gap
-  that blocks baseline functionality of a P1 user story.
-- **HIGH**: a `missing` or `partial` gap on a core functional requirement or acceptance
-  criterion.
-- **MEDIUM**: a `partial` gap on a secondary requirement, or an `unrequested` addition with
-  unclear justification.
-- **LOW**: minor partial gaps, polish, or low-risk `unrequested` additions.
+- **Constitution MUST violation**: `CRITICAL`, regardless of gap type.
+- **`missing`**: `CRITICAL` when it blocks baseline functionality of a P1 user story; `HIGH` for a core functional requirement or acceptance criterion; `MEDIUM` for a secondary requirement; `LOW` for a minor or polish item.
+- **`partial`**: `HIGH` for a core functional requirement or acceptance criterion; `MEDIUM` for a secondary requirement; `LOW` for a minor or polish item.
+- **`contradicts`**: `CRITICAL` when it violates a constitution MUST or blocks baseline functionality of a P1 user story; `HIGH` for a core requirement or a significant behavior, security, or correctness conflict; `MEDIUM` for a secondary conflict; `LOW` for a minor conflict.
+- **`unrequested`**: `HIGH` when the addition creates a material security, privacy, or correctness risk; `MEDIUM` when its justification is unclear or it creates a material but non-critical scope risk; `LOW` when it is low-risk and no material harm is identified. If it conflicts with stated intent, classify it as `contradicts` instead.
 
 ### 6. Present the In-Session Findings Summary
 
@@ -202,16 +199,17 @@ Append to the **end** of `tasks.md`, per the append contract:
    zero-padded IDs `T{M+1:03d}, T{M+2:03d}, …`:
 
    ```markdown
-   - [ ] T042 <imperative description> per <source-ref> (<gap-type>)
+   - [ ] T042 [HIGH] <imperative description> per <source-ref> (<gap-type>)
    ```
 
    `<source-ref>` traces the task to its origin: e.g. `FR-003`, `SC-002`,
    `US1/AC2`, `plan: storage decision`, `Constitution II`.
 
    `<gap-type>` is one of `missing`, `partial`, `contradicts`, `unrequested`.
+   The bracketed severity is REQUIRED on every task and MUST be one of
+   `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`.
 
-   Constitution-violation tasks MUST be emitted first and described as
-   `CRITICAL`.
+   Constitution-violation tasks MUST be emitted first and marked `[CRITICAL]`.
 4. Never reuse or renumber existing IDs. If a prior Convergence phase exists, add a new,
    separately-numbered one below it — do not touch the old one.
 
@@ -255,15 +253,14 @@ After producing the result, check if `.specify/extensions.yml` exists in the pro
     To execute: `/{command}`
     ```
 
-  - **Mandatory hook** (`optional: false`):
+- **Mandatory hook** (`optional: false`):
+  ```text
+  ## Extension Hooks
 
-    ```text
-    ## Extension Hooks
+  **Mandatory Hook**: {extension}
+  Command: `/{command}`
+  Phase: `after_converge`
+  Description: {description}
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+  Before invoking this hook, show the user its exact extension, phase, command, and description and ask for explicit approval. Do not invoke it unless the user approves. If approval is not given, stop workflow.
+  ```

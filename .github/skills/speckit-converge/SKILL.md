@@ -47,13 +47,13 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```text
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Pre-Hook — approval required**: {extension}
+    Phase: before convergence
+    Command: `/{command}`
+    Description: {description}
 
-    Wait for the result of the hook command before proceeding to the Goal.
+    Ask the user for explicit approval before running this hook. Do not execute it until approved; if approval is absent or declined, stop before convergence.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
 
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
@@ -81,6 +81,8 @@ of the code relative to the feature's artifacts — no git, no branch comparison
   Convergence phase);
 - modify, create, or delete any application code — completing the appended tasks is the
   job of `$speckit-implement`.
+
+**Exclusive-writer coordination**: Convergence appends and implementation task-status updates share `tasks.md` and MUST be serialized. Obtain exclusive writer ownership of the resolved `tasks.md`; if no shared lock is available, the parent/coordinator MUST sequence all task-file writers. While holding ownership, re-read `tasks.md`, recompute the maximum task ID and next phase number, and confirm the findings still match its current contents. If it changed since assessment, reconcile the findings before writing. Append the new section in one atomic update, then release ownership. Never write `tasks.md` concurrently with implement or another converge invocation.
 
 When the codebase already satisfies everything, the command MUST leave `tasks.md`
 **byte-for-byte unchanged** (no empty Convergence header) and report a clean result.
@@ -268,10 +270,11 @@ After producing the result, check if `.specify/extensions.yml` exists in the pro
     ```text
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Post-Hook — approval required**: {extension}
+    Phase: after convergence
+    Command: `/{command}`
+    Description: {description}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Ask the user for explicit approval before running this hook. Do not execute it until approved; if approval is absent or declined, stop the workflow.
 
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently

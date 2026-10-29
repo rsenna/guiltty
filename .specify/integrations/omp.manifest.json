@@ -3,15 +3,15 @@
   "version": "1.0.1",
   "installed_at": "2026-08-30T15:32:55.426175+00:00",
   "files": {
-    ".omp/commands/speckit.analyze.md": "07e1e9f997bce9e06d3823ecf1ed315bb62381b81e7d6a7aef19c5087c320e70",
-    ".omp/commands/speckit.clarify.md": "ae3efd8a50a67f49ed867eee2c96775928bb4287cc0f195f01a1d53f8a6053b6",
-    ".omp/commands/speckit.constitution.md": "d76a1ecf2ada88befb6f055650db92f5e3d2ac0ed25795de9e3072fc9cb6484f",
-    ".omp/commands/speckit.implement.md": "f97b04c981e76e9d08518e85ecb775520fd51965c7cff8b43997bc3e59d4a37f",
-    ".omp/commands/speckit.converge.md": "e585bc94a3f01cb45eb4f4f6003268a7bc7e1f1685d343c25ad5dc3c484b4816",
-    ".omp/commands/speckit.plan.md": "ff1809d5d72b399ec364414a150c1a20e782677972d11f0bdf8c65c73f898a71",
-    ".omp/commands/speckit.checklist.md": "efca0a3d9dd3e34712a3f9b7bbad5832fca2584ae977b286f56e57d50f53803b",
-    ".omp/commands/speckit.specify.md": "4317296c28a8ccdbe41c7769147a6d85090815c91634250330f107485607b246",
-    ".omp/commands/speckit.tasks.md": "aa4b299eb052a31e0ab22d3b2e85324c8247f65b873a2125b4f32dc316201fec",
-    ".omp/commands/speckit.taskstoissues.md": "1e9a2e305c17195a65e855ef468043e320ef7d1c01181c80fde40925eb5b448c"
+    ".omp/commands/speckit.analyze.md": "6163d0b66e95997d3a26a4f28e9ee7d3db26235a2a4b3ed2bb49ac51ed4b3d58",
+    ".omp/commands/speckit.clarify.md": "e3b62cbe34487debc533404fc9834d59fc280455bc251bdbba0c39d6203bcac9",
+    ".omp/commands/speckit.constitution.md": "4bf70d4890a066db42d467c4affca627364b7e3def2e2714b10d7f78062f9806",
+    ".omp/commands/speckit.implement.md": "0bdd35e69abafd1f8c0a531b469007197ec3d1304c30c2f8deee584a9467ee17",
+    ".omp/commands/speckit.converge.md": "3265252719b874c24a37f29a77933c4fe6a4009bc91a5fc49853646085ab438e",
+    ".omp/commands/speckit.plan.md": "c802e1813316a77354f8b8f14a51c7dc70dc94b740553c4b30bb8aaa0b5579ce",
+    ".omp/commands/speckit.checklist.md": "b7d2ea8cf89a67770b8e9276adcec253a226a6e51f727751d4ad6595f53dd45d",
+    ".omp/commands/speckit.specify.md": "773f0b2b4a699e0dd06b2b3341d906ec9eb9ad979d4758853fbc9d2cb3939279",
+    ".omp/commands/speckit.tasks.md": "81cc8983d8efa87a0e82dbd771f4ef974c757802d1e2fafef5b71156e05005b6",
+    ".omp/commands/speckit.taskstoissues.md": "2e2e84bfae3140c1409e691b1d8ce8e7f25369f3fd1f3bfd09aa23b4c2c1278d"
   }
 }

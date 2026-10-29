@@ -45,14 +45,14 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Outline.
+    **Mandatory Pre-Hook — approval required**
+    Extension: {extension}
+    Phase: before_tasks
+    Command: `/{command}`
+    Description: {description}
+    Prompt: {prompt}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+    Present this metadata and ask the user to approve this exact invocation. Do not invoke it unless explicitly approved; if approval is absent or declined, stop before proceeding to the Outline.
 
 ## Outline
 
@@ -101,15 +101,18 @@ Check if `.specify/extensions.yml` exists in the project root.
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - For each executable hook, output the following based on its `optional` flag:
-  - **Mandatory hook** (`optional: false`) — **You MUST emit `EXECUTE_COMMAND:` for each mandatory hook**:
+  - **Mandatory hook** (`optional: false`):
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Hook — approval required**
+    Extension: {extension}
+    Phase: after_tasks
+    Command: `/{command}`
+    Description: {description}
+    Prompt: {prompt}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Present this metadata and ask the user to approve this exact invocation. Do not invoke it unless explicitly approved; if approval is absent or declined, stop before continuing.
   - **Optional hook** (`optional: true`):
     ```
     ## Extension Hooks
@@ -165,7 +168,7 @@ Every task MUST strictly follow this format:
 
 **Examples**:
 
-- ✅ CORRECT: `- [ ] T001 Create project structure per implementation plan`
+- ✅ CORRECT: `- [ ] T001 Create the project entry point in src/main.rs per implementation plan`
 - ✅ CORRECT: `- [ ] T005 [P] Implement authentication middleware in src/middleware/auth.py`
 - ✅ CORRECT: `- [ ] T012 [P] [US1] Create User model in src/models/user.py`
 - ✅ CORRECT: `- [ ] T014 [US1] Implement UserService in src/services/user_service.py`

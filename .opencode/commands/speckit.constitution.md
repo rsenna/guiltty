@@ -3,7 +3,7 @@ description: Create or update the project constitution from interactive or provi
 handoffs:
   - label: Build Specification
     agent: speckit.specify
-    prompt: Implement the feature specification based on the updated constitution. I want to build...
+    prompt: Create a feature specification only for the non-governance intent explicitly listed in the preceding Next Actions section. Preserve the exact wording and constraints there. If no feature intent is listed, do not start a spec; return control to the user.
 ---
 
 ## User Input
@@ -28,9 +28,9 @@ and commands read the constitution at runtime and are not modified here.
   workflow.
 - If it is unclear whether an instruction is constitution content, ask for clarification before
   making changes.
-- After completing the constitution update, include a `Next Actions` section for each deferred
-  intent. List the original intent and suggest the appropriate follow-up Spec Kit command, such
-  as `/speckit.specify`, without invoking it.
+- After completing the constitution update, include a `Next Actions` section for each deferred intent. List the original intent and suggest the appropriate follow-up Spec Kit command, such as `/speckit.specify`, without invoking it.
+- For a feature-building intent, set `DEFERRED_INTENTS` to the exact original wording and constraints from the Scope Guard's deferred-intent extraction; substitute it into the `Build Specification` handoff prompt. Never use a static placeholder or include constitution-only instructions as implementation scope.
+- Invoke the `Build Specification` handoff only when a deferred feature specification is appropriate. If there are no such feature intents, omit that handoff and list suitable follow-up actions instead.
 - If there are no non-governance intents, omit the `Next Actions` section.
 
 ## Pre-Execution Checks
@@ -59,14 +59,14 @@ and commands read the constitution at runtime and are not modified here.
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Outline.
+    **Mandatory Pre-Hook — approval required**
+    Extension: {extension}
+    Phase: before_constitution
+    Command: `/{command}`
+    Description: {description}
+    Prompt: {prompt}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+    Present this metadata and ask the user to approve this exact invocation. Do not invoke it unless explicitly approved; if approval is absent or declined, stop before proceeding to the Outline.
 
 ## Outline
 
@@ -165,9 +165,11 @@ Check if `.specify/extensions.yml` exists in the project root.
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Hook — approval required**
+    Extension: {extension}
+    Phase: after_constitution
+    Command: `/{command}`
+    Description: {description}
+    Prompt: {prompt}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+    Present this metadata and ask the user to approve this exact invocation. Do not invoke it unless explicitly approved; if approval is absent or declined, stop before continuing.

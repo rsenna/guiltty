@@ -43,13 +43,12 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Outline.
+    **Mandatory Pre-Hook — approval required**: {extension}
+    Hook: {hook_key}
+    Command: `/{command}`
+    User approval: Ask for explicit approval to run this exact command for this hook before invoking it. If the user does not explicitly approve, do not invoke it and stop this workflow here.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Emit `{hook_key}` as the configured phase key (for example, `before_clarify` or `after_clarify`). The displayed command must be the exact invocation proposed. Do not invoke the hook before approval.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Outline
@@ -251,15 +250,16 @@ Check if `.specify/extensions.yml` exists in the project root.
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
 - For each executable hook, output the following based on its `optional` flag:
-  - **Mandatory hook** (`optional: false`) — **You MUST emit `EXECUTE_COMMAND:` for each mandatory hook**:
+  - **Mandatory hook** (`optional: false`):
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Hook — approval required**: {extension}
+    Hook: {hook_key}
+    Command: `/{command}`
+    User approval: Ask for explicit approval to run this exact command for this hook before invoking it. If the user does not explicitly approve, do not invoke it and stop this workflow here.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Emit `{hook_key}` as the configured phase key (for example, `before_clarify` or `after_clarify`). The displayed command must be the exact invocation proposed. Do not invoke the hook before approval.
   - **Optional hook** (`optional: true`):
     ```
     ## Extension Hooks

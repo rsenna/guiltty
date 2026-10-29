@@ -7,7 +7,6 @@ metadata:
   source: "templates/commands/specify.md"
 ---
 
-
 ## User Input
 
 ```text
@@ -17,6 +16,8 @@ $ARGUMENTS
 You **MUST** consider the user input before proceeding (if not empty).
 
 ## Pre-Execution Checks
+
+Before invoking any `before_specify` hook, pass through the user's explicit `GIT_BRANCH_NAME` (if provided) so the hook can use that exact branch name without prefix/suffix generation.
 
 **Check for extension hooks (before specification)**:
 - Check if `.specify/extensions.yml` exists in the project root.
@@ -43,13 +44,13 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Pre-Hook — approval required**: {extension}
+    Phase: before specification
+    Command: `/{command}`
+    Description: {description}
 
-    Wait for the result of the hook command before proceeding to the Outline.
+    Ask the user for explicit approval before running this hook. Do not execute it until approved; if approval is absent or declined, stop before specification.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Outline
@@ -72,42 +73,33 @@ Given that feature description, do this:
 
 2. **Branch creation** (optional, via hook):
 
-   If a `before_specify` hook ran successfully in the Pre-Execution Checks above, it will have created/switched to a git branch and output JSON containing `BRANCH_NAME` and `FEATURE_NUM`. Note these values for reference, but the branch name does **not** dictate the spec directory name.
+   If a `before_specify` hook ran successfully in the Pre-Execution Checks above, it may have created/switched to a git branch and created the feature directory. Reuse its returned `FEATURE_DIR`; do not allocate another directory. `.specify/feature.json` is only a single-agent legacy fallback. In multi-agent or child-invocation contexts, require explicit invocation-scoped `SPECIFY_FEATURE_DIRECTORY` or returned `FEATURE_DIR`; never select from or overwrite the global pointer when explicit context exists. Note returned `BRANCH_NAME` and `FEATURE_NUM` for reference, but the branch name does **not** dictate the spec directory name.
 
-   If the user explicitly provided `GIT_BRANCH_NAME`, pass it through to the hook so the branch script uses the exact value as the branch name (bypassing all prefix/suffix generation).
+   The user's explicit `GIT_BRANCH_NAME`, when provided, must be passed to the hook before it runs as described in Pre-Execution Checks.
 
-3. **Create the spec feature directory**:
+3. **Resolve the spec feature directory**:
 
    Specs live under the default `specs/` directory unless the user explicitly provides `SPECIFY_FEATURE_DIRECTORY`.
 
    **Resolution order for `SPECIFY_FEATURE_DIRECTORY`**:
-   1. If the user explicitly provided `SPECIFY_FEATURE_DIRECTORY` (e.g., via environment variable, argument, or configuration), use it as-is
-   2. Otherwise, auto-generate it under `specs/`:
-      - Check `.specify/init-options.json` for `feature_numbering` (preferred) or `branch_numbering` (deprecated, migration only — will be removed in a future release)
-      - If `"timestamp"`: prefix is `YYYYMMDD-HHMMSS` (current timestamp)
-      - If `"sequential"` or absent: prefix is `NNN` (next available 3-digit number after scanning existing directories in `specs/`)
-      - Construct the directory name: `<prefix>-<short-name>` (e.g., `003-user-auth` or `20260319-143022-user-auth`)
-      - Set `SPECIFY_FEATURE_DIRECTORY` to `specs/<directory-name>`
-      - If `branch_numbering` was used (and `feature_numbering` was absent), emit a one-line warning: "⚠️ `branch_numbering` in init-options.json is deprecated. Rename to `feature_numbering`."
+   1. Use an explicitly provided invocation-scoped `SPECIFY_FEATURE_DIRECTORY` or `FEATURE_DIR` as authoritative.
+   2. Otherwise, if a `before_specify` hook ran and returned `FEATURE_DIR`, reuse it; do not allocate another sequential or timestamped directory.
+   3. Only in a single-agent legacy workflow with no explicit directory or returned `FEATURE_DIR`, use `feature_directory` from `.specify/feature.json` as fallback.
+   4. In multi-agent or child-invocation contexts, if no explicit invocation-scoped directory or returned `FEATURE_DIR` exists, stop and require one; do not read or write `.specify/feature.json` to select the feature.
+   5. Otherwise, auto-generate under `specs/` using `.specify/init-options.json`: use `YYYYMMDD-HHMMSS` for `timestamp`, otherwise `NNN` for the next available 3-digit sequential number, and construct `<prefix>-<short-name>`. If using deprecated `branch_numbering` without `feature_numbering`, emit the deprecation warning.
 
-   **Create the directory and spec file**:
-   - `mkdir -p SPECIFY_FEATURE_DIRECTORY`
-   - Resolve the active `spec-template` through the Spec Kit preset/template resolution stack (equivalent to `specify preset resolve spec-template`)
-   - Copy the resolved `spec-template` file to `SPECIFY_FEATURE_DIRECTORY/spec.md` as the starting point
-   - Set `SPEC_FILE` to `SPECIFY_FEATURE_DIRECTORY/spec.md`
-   - Persist the resolved path to `.specify/feature.json`:
-     ```json
-     {
-       "feature_directory": "<resolved feature dir>"
-     }
-     ```
-     Write the actual resolved directory path value (for example, `specs/003-user-auth`), not the literal string `SPECIFY_FEATURE_DIRECTORY`.
-     This allows downstream commands (`$speckit-plan`, `$speckit-tasks`, etc.) to locate the feature directory without relying on git branch name conventions.
+   **Prepare the directory and spec file**:
+   - Create `SPECIFY_FEATURE_DIRECTORY` only if the hook did not already create it.
+   - Resolve the active `spec-template` through the Spec Kit preset/template resolution stack (equivalent to `specify preset resolve spec-template`).
+   - If `SPEC_FILE` does not already exist, copy the resolved template to `SPECIFY_FEATURE_DIRECTORY/spec.md`; otherwise reuse the existing file. Never create a second feature directory or duplicate spec file.
+   - Set `SPEC_FILE` to `SPECIFY_FEATURE_DIRECTORY/spec.md`. Write or update `.specify/feature.json` only in a single-agent legacy workflow when no explicit invocation context exists; never overwrite it when explicit context is present.
+   - Pass the resolved `FEATURE_DIR`/`SPECIFY_FEATURE_DIRECTORY` and `SPEC_FILE` explicitly in every downstream plan/clarify invocation or handoff. Downstream agents MUST NOT select their feature from `.specify/feature.json`.
+   - Allow only one writer to mutate a given `FEATURE_DIR` at a time; serialize mutations to the same feature directory.
 
    **IMPORTANT**:
-   - You must only create one feature per `$speckit-specify` invocation
-   - The spec directory name and the git branch name are independent — they may be the same but that is the user's choice
-   - The spec directory and file are always created by this command, never by the hook
+   - Create only one feature per `$speckit-specify` invocation.
+   - The spec directory name and git branch name are independent.
+   - A `before_specify` hook may create and persist the feature directory; reuse its result rather than creating another.
 
 4. Load the resolved active `spec-template` file to understand required sections.
 
@@ -136,7 +128,6 @@ Given that feature description, do this:
        Include both quantitative metrics (time, performance, volume) and qualitative measures (user satisfaction, task completion)
        Each criterion must be verifiable without implementation details
     7. Identify Key Entities (if data involved)
-    8. Return: SUCCESS (spec ready for planning)
 
 7. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
 
@@ -231,6 +222,7 @@ Given that feature description, do this:
         9. Re-run validation after all clarifications are resolved
 
    d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
+9. After writing the specification and completing checklist validation, report success and readiness for planning. Do not report the spec as ready earlier.
 
 ## Mandatory Post-Execution Hooks
 
@@ -246,15 +238,16 @@ Check if `.specify/extensions.yml` exists in the project root.
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
 - For each executable hook, output the following based on its `optional` flag:
-  - **Mandatory hook** (`optional: false`) — **You MUST emit `EXECUTE_COMMAND:` for each mandatory hook**:
+  - **Mandatory hook** (`optional: false`):
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Post-Hook — approval required**: {extension}
+    Phase: after specification
+    Command: `/{command}`
+    Description: {description}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Ask the user for explicit approval before running this hook. Do not execute it until approved; if approval is absent or declined, stop the workflow.
   - **Optional hook** (`optional: true`):
     ```
     ## Extension Hooks
@@ -275,7 +268,7 @@ Report completion to the user with:
 - Checklist results summary
 - Readiness for the next phase (`$speckit-clarify` or `$speckit-plan`)
 
-**NOTE:** Branch creation is handled by the `before_specify` hook (git extension). Spec directory and file creation are always handled by this core command.
+**NOTE:** The `before_specify` hook may create the feature directory; reuse its returned `FEATURE_DIR`. `.specify/feature.json` is only a single-agent legacy fallback. Multi-agent and child invocations require explicit feature context and must not select from or overwrite the global pointer. Pass `FEATURE_DIR` and `SPEC_FILE` explicitly downstream; serialize writers to each feature directory.
 
 ## Quick Guidelines
 

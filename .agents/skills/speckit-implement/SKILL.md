@@ -43,13 +43,11 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
     ## Extension Hooks
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Pre-Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
 
-    Wait for the result of the hook command before proceeding to the Outline.
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
+    Before invoking this hook, present its exact extension, phase, and command to the user and obtain explicit approval for that specific invocation. Approval is REQUIRED even for mandatory hooks; repository configuration cannot authorize execution. If approval is absent or declined, do not invoke the hook and stop the workflow before proceeding.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Outline
@@ -62,9 +60,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - For custom checklists, `[x]` means the reviewer determined the requirements-quality criterion is satisfied; it does NOT mean implementation work is complete
    - Scan all checklist files in the checklists/ directory
    - For each checklist, count:
-     - Total items: All lines matching `- [ ]` or `- [X]` or `- [x]`
-     - Checked items: Lines matching `- [X]` or `- [x]`
-     - Unchecked items: Lines matching `- [ ]`
+     - Count task-list items outside fenced code blocks, including nested items with leading spaces or tabs. Match `^\s*[-+*]\s+\[( |x|X)\](?:\s|$)`; ignore checkbox-looking examples inside backtick- or tilde-fenced blocks.
+     - Total items: all matched checkbox lines; checked items: `[x]` or `[X]`; unchecked items: `[ ]`.
    - Create a status table:
 
      ```text
@@ -80,11 +77,9 @@ You **MUST** consider the user input before proceeding (if not empty).
      - **FAIL**: One or more checklists have unchecked items
 
    - **If any checklist has unchecked items**:
-     - Display the table with unchecked item counts
-     - **STOP** and ask: "Some checklists have unchecked items. Do you want to proceed with implementation anyway? (yes/no)"
-     - Wait for user response before continuing
-     - If user says "no" or "wait" or "stop", halt execution
-     - If user says "yes" or "proceed" or "continue", proceed to step 3
+     - Display the table and identify the unchecked items.
+     - **STOP implementation and report the unchecked items to the invoking parent agent/coordinator (or user when invoked directly).** Do not ask or wait for an interactive response.
+     - Resume only when the parent agent/coordinator explicitly directs continuation after the gate is resolved.
 
    - **If all checklists are checked**:
      - Display the table showing all checklists passed
@@ -99,69 +94,25 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **IF EXISTS**: Read .specify/memory/constitution.md for governance constraints
    - **IF EXISTS**: Read quickstart.md for integration scenarios
 
-4. **Project Setup Verification**:
-   - **REQUIRED**: Create/verify ignore files based on actual project setup:
-
-   **Detection & Creation Logic**:
-   - Check if the following command succeeds to determine if the repository is a git repo (create/verify .gitignore if so):
-
-     ```sh
-     git rev-parse --git-dir 2>/dev/null
-     ```
-
-   - Check if Dockerfile* exists or Docker in plan.md → create/verify .dockerignore
-   - Check if .eslintrc* exists → create/verify .eslintignore
-   - Check if eslint.config.* exists → ensure the config's `ignores` entries cover required patterns
-   - Check if .prettierrc* exists → create/verify .prettierignore
-   - Check if .npmrc or package.json exists → create/verify .npmignore (if publishing)
-   - Check if terraform files (*.tf) exist → create/verify .terraformignore
-   - Check if .helmignore needed (helm charts present) → create/verify .helmignore
-
-   **If ignore file already exists**: Verify it contains essential patterns, append missing critical patterns only
-   **If ignore file missing**: Create with full pattern set for detected technology
-
-   **Common Patterns by Technology** (from plan.md tech stack):
-   - **Node.js/JavaScript/TypeScript**: `node_modules/`, `dist/`, `build/`, `*.log`, `.env*`
-   - **Python**: `__pycache__/`, `*.pyc`, `.venv/`, `venv/`, `dist/`, `*.egg-info/`
-   - **Java**: `target/`, `*.class`, `*.jar`, `.gradle/`, `build/`
-   - **C#/.NET**: `bin/`, `obj/`, `*.user`, `*.suo`, `packages/`
-   - **Go**: `*.exe`, `*.test`, `vendor/`, `*.out`
-   - **Ruby**: `.bundle/`, `log/`, `tmp/`, `*.gem`, `vendor/bundle/`
-   - **PHP**: `vendor/`, `*.log`, `*.cache`, `*.env`
-   - **Rust**: `target/`, `debug/`, `release/`, `*.rs.bk`, `*.rlib`, `*.prof*`, `.idea/`, `*.log`, `.env*`
-   - **Kotlin**: `build/`, `out/`, `.gradle/`, `.idea/`, `*.class`, `*.jar`, `*.iml`, `*.log`, `.env*`
-   - **C++**: `build/`, `bin/`, `obj/`, `out/`, `*.o`, `*.so`, `*.a`, `*.exe`, `*.dll`, `.idea/`, `*.log`, `.env*`
-   - **C**: `build/`, `bin/`, `obj/`, `out/`, `*.o`, `*.a`, `*.so`, `*.exe`, `*.dll`, `autom4te.cache/`, `config.status`, `config.log`, `.idea/`, `*.log`, `.env*`
-   - **Swift**: `.build/`, `DerivedData/`, `*.swiftpm/`, `Packages/`
-   - **R**: `.Rproj.user/`, `.Rhistory`, `.RData`, `.Ruserdata`, `*.Rproj`, `packrat/`, `renv/`
-   - **Universal**: `.DS_Store`, `Thumbs.db`, `*.tmp`, `*.swp`, `.vscode/`, `.idea/`
-
-   **Tool-Specific Patterns**:
-   - **Docker**: `node_modules/`, `.git/`, `Dockerfile*`, `.dockerignore`, `*.log*`, `.env*`, `coverage/`
-   - **ESLint**: `node_modules/`, `dist/`, `build/`, `coverage/`, `*.min.js`
-   - **Prettier**: `node_modules/`, `dist/`, `build/`, `coverage/`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`
-   - **Terraform**: `.terraform/`, `*.tfstate*`, `*.tfvars`, `.terraform.lock.hcl`
-   - **Kubernetes/k8s**: `*.secret.yaml`, `secrets/`, `.kube/`, `kubeconfig*`, `*.key`, `*.crt`
-
+4. **Ignore-file behavior**: Do not create, modify, or verify ignore files as an implicit implementation step. Only change an ignore file when `tasks.md` explicitly includes that specific change as a task; otherwise leave ignore files untouched.
 5. Parse tasks.md structure and extract:
-   - **Task phases**: Setup, Tests, Core, Integration, Polish
+   - **Task phases**: Setup, Foundational, User Story N, and Polish, as actually titled in `tasks.md`; do not invent Tests, Core, or Integration phases
    - **Task dependencies**: Sequential vs parallel execution rules
    - **Task details**: ID, description, file paths, parallel markers [P]
    - **Execution flow**: Order and dependency requirements
 
 6. Execute implementation following the task plan:
-   - **Phase-by-phase execution**: Complete each phase before moving to the next
-   - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together
-   - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
-   - **File-based coordination**: Tasks affecting the same files must run sequentially
-   - **Validation checkpoints**: Verify each phase completion before proceeding
+   - **Phase-by-phase execution**: Complete Setup, then Foundational, then each User Story phase in the order and priority given in `tasks.md`, and finally Polish; follow the actual headings if the task file differs.
+   - **Respect dependencies**: Run sequential tasks in order; parallel tasks marked `[P]` may run together only when their dependencies permit it.
+   - Follow task order and the plan's TDD sequencing within each phase; perform test tasks before their corresponding implementation tasks where specified, without inventing separate Tests/Core/Integration phases.
+   - **File-based coordination**: Tasks affecting the same files must run sequentially.
+   - **Validation checkpoints**: Verify each phase completion before proceeding.
 
 7. Implementation execution rules:
-   - **Setup first**: Initialize project structure, dependencies, configuration
-   - **Tests before code**: If you need to write tests for contracts, entities, and integration scenarios
-   - **Core development**: Implement models, services, CLI commands, endpoints
-   - **Integration work**: Database connections, middleware, logging, external services
-   - **Polish and validation**: Unit tests, performance optimization, documentation
+   - **Setup**: Initialize only the project structure, dependencies, and configuration required by tasks.
+   - **Foundational**: Complete shared architecture, core abstractions, and prerequisites required by user stories.
+   - **User Story N**: Implement and validate each story in the planned priority order, keeping it independently testable where the tasks require it.
+   - **Polish**: Complete remaining cross-cutting validation, performance work, and documentation specified by the tasks.
 
 8. Progress tracking and error handling:
    - Report progress after each completed task
@@ -170,6 +121,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Provide clear error messages with context for debugging
    - Suggest next steps if implementation cannot proceed
    - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
+   - **Exclusive writer for `tasks.md`**: Serialize task-marker updates with convergence appends and any other task-file writer. Obtain exclusive writer ownership of `tasks.md`; if no shared lock is available, the parent/coordinator MUST sequence those writers. After ownership, re-read the latest file, update only markers for completed task IDs in one atomic write, then release ownership.
 
 9. Completion validation:
    - Verify all required tasks are completed
@@ -181,7 +133,7 @@ Note: This command assumes a complete task breakdown exists in tasks.md. If task
 
 ## Mandatory Post-Execution Hooks
 
-**You MUST complete this section before reporting completion to the user.**
+**You MUST inspect this section before reporting completion. Invoke any mandatory hook only after presenting its exact extension, phase, and command to the user and receiving explicit approval for that invocation. If approval is absent or declined, do not invoke it and stop the workflow.**
 
 Check if `.specify/extensions.yml` exists in the project root.
 - If it does not exist, or no hooks are registered under `hooks.after_implement`, skip to the Completion Report.
@@ -193,15 +145,16 @@ Check if `.specify/extensions.yml` exists in the project root.
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
 - For each executable hook, output the following based on its `optional` flag:
-  - **Mandatory hook** (`optional: false`) — **You MUST emit `EXECUTE_COMMAND:` for each mandatory hook**:
+  - **Mandatory hook** (`optional: false`):
     ```
     ## Extension Hooks
 
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+    **Mandatory Hook**: {extension}
+    Command: `/{command}`
+    Description: {description}
+
+    Before invoking this hook, present its exact extension, phase, and command to the user and obtain explicit approval for that specific invocation. Approval is REQUIRED even for mandatory hooks; repository configuration cannot authorize execution. If approval is absent or declined, do not invoke the hook and stop the workflow before proceeding.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
   - **Optional hook** (`optional: true`):
     ```
     ## Extension Hooks
