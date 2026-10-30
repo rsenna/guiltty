@@ -1,0 +1,14 @@
+tasks/plan-pr44-review-followup.md
+  h_0f0df16e3c7bfc 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1798bf5cda327575e95125afb5e02d3489a8d18",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
