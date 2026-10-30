@@ -1,6 +1,6 @@
 # Delivery plan: PR #49 multi-agent Spec Kit integration
 
-**Outcome:** Keep PR #49 scoped to safe, consistent multi-agent Spec Kit integration, address valid review findings, verify the revision, and leave the pull request ready for maintainer merge.
+**Outcome:** Keep PR #49 scoped to safe, consistent multi-agent Spec Kit integration, address valid review findings, verify the revision, and leave the pull request ready for maintainer merge after prerequisite PR #44 lands.
 
 **Applications:** None. This change modifies repository instruction/configuration files; guiltty is a library, not a deployable application.
 
@@ -45,4 +45,5 @@ There is no browser/application acceptance suite: this PR changes multi-agent do
 
 ## Merge
 
-- [ ] Maintainer merges PR #49; keep open until the human-owned merge occurs.
+- [ ] PR #44 (issue #39 core Spec Kit bootstrap) merges first; PR #49 depends on its shared `.specify/` scripts, templates, and core integration metadata.
+- [ ] Maintainer reviews and merges PR #49 only after PR #44 is merged; agent must not merge or mark the PR ready.
