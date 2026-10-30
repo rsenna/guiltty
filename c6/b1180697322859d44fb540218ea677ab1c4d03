@@ -1,0 +1,14 @@
+tests/shell/specify-scripts-test.sh
+  h_0f0df16e3c7bfc 54-63,139-141,170-171,200-202,204-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6b1180697322859d44fb540218ea677ab1c4d03",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
