@@ -51,6 +51,16 @@ assert_contains() {
     fi
 }
 
+# assert_equal <description> <expected> <actual>
+assert_equal() {
+    local desc="$1" expected="$2" actual="$3"
+    if [ "$actual" = "$expected" ]; then
+        ok
+    else
+        fail "$desc (expected '$expected', got '$actual')"
+    fi
+}
+
 # --- 1. executable permissions -------------------------------------------
 for f in check-prerequisites.sh common.sh create-new-feature.sh setup-plan.sh setup-tasks.sh; do
     assert "executable: $f" test -x "$SPECIFY_SCRIPTS/$f"
@@ -126,11 +136,9 @@ else
 fi
 assert "successful feature creation writes spec.md" test -s "$TMP/specs/997-smoke-feature/spec.md"
 assert "successful feature creation persists feature.json" test -s "$TMP/.specify/feature.json"
-if python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["feature_directory"] == "specs/997-smoke-feature"' "$TMP/.specify/feature.json"; then
-    ok
-else
-    fail "feature.json stores a relative feature_directory"
-fi
+expected_feature_json='{"feature_directory":"specs/997-smoke-feature"}'
+actual_feature_json=$(cat "$TMP/.specify/feature.json")
+assert_equal "feature.json stores exact relative feature_directory JSON" "$expected_feature_json" "$actual_feature_json"
 assert "feature.json is gitignored" git -C "$REPO_ROOT" check-ignore -q .specify/feature.json
 
 # --- 3. check-prerequisites.sh -------------------------------------------
@@ -159,11 +167,8 @@ mkdir -p "$TMP/specs/003-complete"
 touch "$TMP/specs/003-complete/spec.md" "$TMP/specs/003-complete/plan.md"
 out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/003-complete" \
     SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" --json 2>/dev/null)
-if printf '%s\n' "$out" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert isinstance(data,dict) and "FEATURE_DIR" in data'; then
-    ok
-else
-    fail "check-prerequisites --json emits valid JSON with FEATURE_DIR"
-fi
+expected_prerequisites_json="{\"FEATURE_DIR\":\"$TMP/specs/003-complete\",\"AVAILABLE_DOCS\":[]}"
+assert_equal "check-prerequisites --json emits exact valid JSON contract" "$expected_prerequisites_json" "$out"
 
 out=$(SPECIFY_FEATURE_DIRECTORY="$TMP/specs/003-complete" \
     SPECIFY_INIT_DIR="$TMP" bash "$SPECIFY_SCRIPTS/check-prerequisites.sh" --paths-only 2>&1)
@@ -192,18 +197,12 @@ out=$(SPECIFY_INIT_DIR="$TMP" \
     bash -c 'source "$1/.specify/scripts/bash/common.sh"; resolve_template spec-template "$1"' _ "$TMP")
 assert_contains "override wins over core template" "overrides/spec-template.md" "$out"
 
-# --- 6. JSON output (jq or printf fallback) ------------------------------
-# --json --dry-run must emit a JSON object with BRANCH_NAME whether jq is
-# available or the printf-based fallback is used. (A full no-jq/no-python3
-# run is environment-dependent — jq is exposed as a shell builtin here — so
-# this asserts the output contract rather than the specific code path.)
+# Assert exact JSON for known inputs using Bash only. Exact equality validates
+# the complete output contract without requiring jq or Python in this suite.
+expected_json="{\"BRANCH_NAME\":\"996-fallback-test\",\"SPEC_FILE\":\"$TMP/specs/996-fallback-test/spec.md\",\"FEATURE_NUM\":\"996\",\"DRY_RUN\":true}"
 out=$(SPECIFY_INIT_DIR="$TMP" \
-    bash "$SPECIFY_SCRIPTS/create-new-feature.sh" --json --dry-run "fallback test" 2>/dev/null)
-if printf '%s\n' "$out" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert isinstance(data,dict) and isinstance(data.get("BRANCH_NAME"),str) and data["BRANCH_NAME"]'; then
-    ok
-else
-    fail "create-new-feature --json emits valid JSON with BRANCH_NAME"
-fi
+    bash "$SPECIFY_SCRIPTS/create-new-feature.sh" --number 996 --json --dry-run "fallback test" 2>/dev/null)
+assert_equal "create-new-feature --json emits exact valid JSON contract" "$expected_json" "$out"
 
 # --- 7. workflow metadata and gate ordering ------------------------------
 wf="$REPO_ROOT/.specify/workflows/speckit/workflow.yml"
