@@ -1,0 +1,35 @@
+{
+  "version": "1.0.1",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "codex",
+    "claude",
+    "copilot",
+    "opencode",
+    "omp"
+  ],
+  "integration_settings": {
+    "codex": {
+      "script": "sh",
+      "raw_options": "--skills",
+      "parsed_options": {
+        "skills": true
+      },
+      "invoke_separator": "-"
+    },
+    "claude": {
+      "invoke_separator": "-"
+    },
+    "copilot": {
+      "invoke_separator": "-"
+    },
+    "opencode": {
+      "invoke_separator": "."
+    },
+    "omp": {
+      "invoke_separator": "."
+    }
+  },
+  "integration": "codex",
+  "default_integration": "codex"
+}
