@@ -1,0 +1,14 @@
+tasks/plan-pr49-multi-agent.md
+  h_0f0df16e3c7bfc 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2da1e3979ce606938804809ee1879087efc580a8",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
