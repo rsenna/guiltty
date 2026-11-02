@@ -1,0 +1,18 @@
+.omp/commands/speckit.taskstoissues.md
+  h_0f0df16e3c7bfc 3
+.specify/integrations/omp.manifest.json
+  h_0f0df16e3c7bfc 15
+tasks/plan-pr49-multi-agent.md
+  h_0f0df16e3c7bfc 13,17,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9a5cc20a76eb21280fae2371e4060cbb8d96da0f",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
