@@ -14,7 +14,7 @@
 
 There is no browser/application acceptance suite: this PR changes multi-agent documentation and integration metadata only; it ships no application.
 
-**Code revision tested:** `9a5cc20a76eb21280fae2371e4060cbb8d96da0f` on branch `speckit-multi-agent`; the OMP session-capability correction was validated at this revision.
+**Code revision tested:** `972a3122efc69b600e89eaaf92c2ee8de9aa4eb1` on branch `speckit-multi-agent`; the native OMP session-capability correction was validated at this revision.
 
 ## Plan
 
