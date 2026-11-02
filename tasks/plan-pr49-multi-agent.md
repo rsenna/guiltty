@@ -10,10 +10,11 @@
 - [x] **unit** — `cargo llvm-cov --workspace --summary-only --fail-under-lines 90`: 92.16% line coverage at the PR branch revision.
 - [x] **manual** — validate all 50 integration manifest hashes against their referenced files; audit copied agent instructions for automatic repository-hook execution (none remain).
 - [x] **manual** — independent review found no actionable findings; GitHub CI and Codacy checks passed on PR #49.
+- [x] **manual** — verified OMP taskstoissues frontmatter includes `bash`, `read`, and both GitHub tools required by its prerequisite, remote-check, document-reading, and issue-creation steps.
 
 There is no browser/application acceptance suite: this PR changes multi-agent documentation and integration metadata only; it ships no application.
 
-**Code revision tested:** `ff76732834d59ef4389267d02dc284d1ac50d7e8` on branch `speckit-multi-agent`. The plan-file commit is tracking-only and does not change implementation files.
+**Code revision tested:** `0a5a27b21ff34e690817daa92ed17dbf65a75f8e` on branch `speckit-multi-agent`; the OMP frontmatter/docs change is validated separately and does not change Rust source.
 
 ## Plan
 
@@ -27,6 +28,7 @@ There is no browser/application acceptance suite: this PR changes multi-agent do
 - [x] Scope feature selection and handoffs to each invocation; reserve `.specify/feature.json` for single-agent legacy fallback; serialize shared feature/task writes.
 - [x] Correct task-to-issue paths, canonical feature-scoped deduplication, ambiguous legacy handling, checked-task skipping, and repository pagination expectations.
 - [x] Align task generation and implementation guidance: behavioral work is test-first, convergence tasks have explicit severity and test/implementation order, phase names match generated task files, and ignore files are task-scoped.
+- [x] Add the required `bash` and `read` tools to the OMP taskstoissues command allowlist while preserving GitHub issue tools.
 - [x] Correct checklist template fallback/resolution, analysis finding IDs, handoff prompts, and per-agent consistency.
 - [x] Refresh all integration manifest hashes after content changes.
 
