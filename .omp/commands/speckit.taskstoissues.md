@@ -1,6 +1,5 @@
 ---
 description: Convert existing tasks into actionable, dependency-ordered GitHub issues for the feature based on available design artifacts.
-tools: ['bash', 'read', 'github/github-mcp-server/list_issues', 'github/github-mcp-server/issue_write']
 ---
 
 ## User Input
@@ -10,6 +9,9 @@ $ARGUMENTS
 ```
 
 You **MUST** consider the user input before proceeding (if not empty).
+## Required OMP session tools
+
+This native `.omp/commands/*.md` slash command does not grant or restrict tools through frontmatter. Its workflow requires the active OMP session to provide `bash`, `read`, and the GitHub MCP tools `github/github-mcp-server/list_issues` and `github/github-mcp-server/issue_write`. If any are unavailable, stop and tell the user which session-level capability is missing; do not claim prerequisites were checked or issues were created.
 
 ## Pre-Execution Checks
 
