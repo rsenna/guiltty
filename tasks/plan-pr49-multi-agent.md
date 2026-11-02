@@ -14,7 +14,7 @@
 
 There is no browser/application acceptance suite: this PR changes multi-agent documentation and integration metadata only; it ships no application.
 
-**Code revision tested:** `0a5a27b21ff34e690817daa92ed17dbf65a75f8e` on branch `speckit-multi-agent`; the OMP frontmatter/docs change is validated separately and does not change Rust source.
+**Code revision tested:** `9a5cc20a76eb21280fae2371e4060cbb8d96da0f` on branch `speckit-multi-agent`; the OMP tools-frontmatter and manifest change were validated at this revision.
 
 ## Plan
 
