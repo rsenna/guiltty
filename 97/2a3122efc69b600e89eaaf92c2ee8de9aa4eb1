@@ -1,0 +1,16 @@
+.omp/commands/speckit.taskstoissues.md
+  h_0f0df16e3c7bfc 12-14
+.specify/integrations/omp.manifest.json
+  h_0f0df16e3c7bfc 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "972a3122efc69b600e89eaaf92c2ee8de9aa4eb1",
+  "prompts": {},
+  "humans": {
+    "h_0f0df16e3c7bfc": {
+      "author": "owkwo-bot <agents@owkwo.org>"
+    }
+  }
+}
