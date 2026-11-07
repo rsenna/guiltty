@@ -1,0 +1,23 @@
+{
+  "ai": "codex",
+  "ai_skills": true,
+  "supported_ai": [
+    "codex",
+    "claude",
+    "copilot",
+    "opencode",
+    "omp"
+  ],
+  "feature_numbering": "sequential",
+  "here": true,
+  "integration": "codex",
+  "supported_integrations": [
+    "codex",
+    "claude",
+    "copilot",
+    "opencode",
+    "omp"
+  ],
+  "script": "sh",
+  "speckit_version": "1.0.1"
+}
