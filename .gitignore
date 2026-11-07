@@ -6,3 +6,4 @@
 /target/
 
 !examples/src/bin/
+/.specify/feature.json
